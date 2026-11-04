@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}INSpire{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com/3.4.16"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='aether.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='inspire.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<aside class="rail ae-rail">
+  <div class="px-5 py-4 flex items-center justify-between border-b border-white/10">
+    <div><div class="text-[17px] font-semibold tracking-[0.14em] text-white">INSPIRE</div>
+      <div class="text-[10.5px] text-[#9fb3d9] whitespace-nowrap">Spare parts · built on AETHER</div></div>
+  </div>
+  <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-5 text-[13px]" aria-label="Main">
+    <div>
+      <div class="rail-heading">Daily work</div>
+      <a href="/" class="rail-item {{ 'is-active' if page=='site' }}" title="What needs attention today"><i class="fa-solid fa-industry rail-glyph"></i><span class="flex-1 text-left">Overview</span></a>
+      <a href="/parts" class="rail-item {{ 'is-active' if page=='parts' }}" title="Search and filter every part"><i class="fa-solid fa-boxes-stacked rail-glyph"></i><span class="flex-1 text-left">Parts</span><span class="rail-count">{{ nav.parts|num }}</span></a>
+      <a href="/actions" class="rail-item {{ 'is-active' if page=='actions' }}" title="Approve and track the proposed actions"><i class="fa-solid fa-list-check rail-glyph"></i><span class="flex-1 text-left">Action Center</span><span class="rail-warn" title="Waiting for review">{{ nav.proposed|num }}</span></a>
+    </div>
+    <div>
+      <div class="rail-heading">Simulate</div>
+      <a href="/twin/replay" class="rail-item {{ 'is-active' if page=='twin' }}" title="One simulated year for all parts: today vs INSpire Min/Max"><i class="fa-solid fa-chart-line rail-glyph"></i><span class="flex-1 text-left">Warehouse replay</span></a>
+      <a href="/policy" class="rail-item {{ 'is-active' if page=='policy' }}" title="Test one part with your own Min/Max or lead time"><i class="fa-solid fa-flask rail-glyph"></i><span class="flex-1 text-left">Policy Lab</span></a>
+    </div>
+    <div>
+      <div class="rail-heading">Equipment</div>
+      <a href="/equipment" class="rail-item {{ 'is-active' if page=='equipment' }}" title="Drawings of each machine and the parts installed on it"><i class="fa-solid fa-gears rail-glyph"></i><span class="flex-1 text-left">Equipment twin</span></a>
+    </div>
+    <div>
+      <div class="rail-heading">Data checks</div>
+      <a href="/exceptions" class="rail-item {{ 'is-active' if page=='command' }}" title="Parts that break a stock rule"><i class="fa-solid fa-triangle-exclamation rail-glyph"></i><span class="flex-1 text-left">Rule checks</span></a>
+      <a href="/trust" class="rail-item {{ 'is-active' if page=='trust' }}" title="Where every number comes from, and what is uncertain"><i class="fa-solid fa-database rail-glyph"></i><span class="flex-1 text-left">Data Trust</span></a>
+    </div>
+  </nav>
+  <div class="rail-foot">
+    <button type="button" onclick="AI.toggle()" class="rail-digest" aria-label="Open INSpire Copilot">
+      <i class="fa-solid fa-wand-magic-sparkles"></i>
+      <span class="flex-1 text-left"><b>INSpire Copilot</b><small>Ask about any part or number</small></span></button>
+  </div>
+</aside>
+<main>
+<header class="ae-topbar">
+  <nav class="flex items-center gap-2 text-[13px]" aria-label="Breadcrumb">
+    <span class="text-slate-500">Chandra Asri Group</span><i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
+    {% set sec = {'site':'Overview','command':'Rule checks','parts':'Parts','actions':'Action Center','twin':'Warehouse replay','equipment':'Equipment twin','policy':'Policy Lab','trust':'Data Trust'}.get(page, '') %}
+    {% set sec_url = {'site':'/','command':'/exceptions','parts':'/parts','actions':'/actions','twin':'/twin/replay','equipment':'/equipment','policy':'/policy','trust':'/trust'}.get(page, '/') %}
+    {% if false %}{% block crumb %}{% endblock %}{% endif %}{% set leaf = self.crumb() %}
+    {% if leaf|trim %}<a href="{{ sec_url }}" class="text-slate-500 hover:text-slate-900">{{ sec }}</a><i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
+      <span class="text-slate-900 font-semibold truncate" style="max-width:420px">{{ leaf|trim }}</span>
+    {% else %}<span class="text-slate-900 font-semibold">{{ sec }}</span>{% endif %}
+  </nav>
+  <div class="tb-right">
+    <span class="tb-chip synth" title="Source data documented as synthetic (dummy); not operational performance"><i class="fa-solid fa-flask-vial"></i> Synthetic data</span>
+    <span class="tb-chip" title="Stock snapshot date"><i class="fa-regular fa-calendar"></i> Stock 1 Oct 2026</span>
+    <span class="tb-chip eng" title="Team engine run RUN-277fc4b966e6, contract 0.2. Demand scenario A (all issue lines), PR PO view ED (exact copies removed)."><i class="fa-solid fa-gears"></i> Engine RUN-277fc · A · ED</span>
+    <button type="button" class="tb-ai" onclick="AI.toggle()"><i class="fa-solid fa-wand-magic-sparkles"></i> Ask Copilot</button>
+  </div>
+</header>
+{% block content %}{% endblock %}
+</main>
+
+<aside class="drawer" id="drawer" aria-label="INSpire Copilot">
+  <div class="d-head">
+    <span class="d-ic"><i class="fa-solid fa-wand-magic-sparkles"></i></span>
+    <div class="d-t"><b>INSpire Copilot</b><p>Explains engine results in plain words. A person decides.</p></div>
+    <button type="button" onclick="AI.toggle(false)" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+  <div class="d-rules"><span><i class="fa-solid fa-database"></i> Engine facts only</span><span><i class="fa-solid fa-hashtag"></i> Cites part numbers</span><span><i class="fa-solid fa-user-check"></i> Never approves</span></div>
+  <div class="ctx" id="aiCtx"></div>
+  <div class="d-log" id="aiLog"><div class="suggest" id="aiSuggest"></div></div>
+  <form onsubmit="event.preventDefault(); AI.ask(document.getElementById('aiQ').value)">
+    <input id="aiQ" placeholder="Ask about a part or a number, English or Indonesian" autocomplete="off">
+    <button class="d-send" aria-label="Ask"><i class="fa-solid fa-paper-plane"></i></button>
+  </form>
+</aside>
+
+<div id="srcPop" class="src-pop" role="dialog" aria-modal="false" hidden></div>
+<script>
+const SOURCES = {{ SOURCES|tojson }};
+(function () {
+  const pop = document.getElementById('srcPop');
+  const close = () => { pop.hidden = true; };
+  document.addEventListener('click', e => {
+    const b = e.target.closest('.src');
+    if (!b) { if (!pop.contains(e.target)) close(); return; }
+    e.preventDefault(); e.stopPropagation();
+    const s = SOURCES[b.dataset.src]; if (!s) return;
+    pop.innerHTML = `<div class="sp-head"><b>${s.title}</b><span class="kind ${s.kind}">${s.kind}</span></div>` +
+      (s.files.length ? `<div class="sp-row"><span>Source files</span><div>${s.files.map(f => `<code>${f}.xlsx</code>`).join(' ')}</div></div>` : '') +
+      (s.cols ? `<div class="sp-row"><span>Columns</span><div>${s.cols}</div></div>` : '') +
+      `<div class="sp-row"><span>Rule</span><div>${s.how}</div></div>` +
+      `<a class="sp-link" href="/trust">Data Trust: method, assumptions, open definitions →</a>`;
+    pop.hidden = false;
+    const r = b.getBoundingClientRect(), w = Math.min(380, innerWidth - 24);
+    pop.style.width = w + 'px';
+    pop.style.left = Math.max(12, Math.min(r.left - 12, innerWidth - w - 12)) + 'px';
+    const below = r.bottom + 8, h = pop.offsetHeight;
+    pop.style.top = (below + h > innerHeight - 8 ? Math.max(8, r.top - h - 8) : below) + 'px';
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  addEventListener('scroll', close, true);
+})();
+const fmtIDR = v => v == null ? '-' : (Math.abs(v) >= 1e9 ? 'IDR ' + (v/1e9).toFixed(1) + ' B' : Math.abs(v) >= 1e6 ? 'IDR ' + (v/1e6).toFixed(1) + ' M' : 'IDR ' + Math.round(v).toLocaleString('en-US'));
+const pct = (v, d=0) => v == null ? '-' : (v*100).toFixed(d) + '%';
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const monShort = m => MON[+m.slice(5, 7) - 1] + " '" + m.slice(2, 4);
+const monLong = m => MON[+m.slice(5, 7) - 1] + ' ' + m.slice(0, 4);
+if (window.Chart) { Chart.defaults.font.family = 'Inter, system-ui, sans-serif'; Chart.defaults.color = '#475569'; }
+
+/* ---------- INSpire Copilot: one panel on every screen, aware of the screen it is opened from */
+const AI = {
+  material: {{ (ai_material or '')|tojson }},
+  context: {{ (ai_context or 'Whole warehouse')|tojson }},
+  suggestions: {{ (ai_suggestions or ['Which critical parts should we reorder first this week?', 'Where can we free the most capital, and what needs an engineer review?', 'Which Non Stock parts should become Stock Items, and why?', 'Bearing mana yang paling berisiko habis?'])|tojson }},
+  toggle(open) {
+    const on = open ?? !document.body.classList.contains('drawer-open');
+    document.body.classList.toggle('drawer-open', on);
+    try { localStorage.setItem('aiOpen', on ? '1' : '0'); } catch (e) {}
+    if (on) document.getElementById('aiQ').focus();
+    window.dispatchEvent(new Event('resize'));
+  },
+  init() {
+    document.getElementById('aiCtx').innerHTML = '<i class="fa-solid fa-location-crosshairs"></i> Context: ' + esc(this.context);
+    document.getElementById('aiSuggest').innerHTML = this.suggestions.map(s => `<button type="button">${esc(s)}</button>`).join('');
+    document.querySelectorAll('#aiSuggest button').forEach(b => b.onclick = () => this.ask(b.textContent));
+    try { if (localStorage.getItem('aiOpen') === '1') document.body.classList.add('drawer-open'); } catch (e) {}
+    const q = new URLSearchParams(location.search).get('ask');
+    if (q) { this.toggle(true); this.ask(q); }
+  },
+  linkify: s => esc(String(s).replace(/\$([^$\n]{1,40})\$/g, '$1').replace(/\\%/g, '%')).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\b(4\d{9})\b/g, '<a href="/parts/$1">$1</a>'),
+  async ask(q) {
+    q = (q || '').trim(); if (!q) return;
+    this.toggle(true);
+    document.getElementById('aiQ').value = '';
+    const log = document.getElementById('aiLog');
+    log.insertAdjacentHTML('beforeend', `<div class="msg q">${esc(q)}</div>`);
+    const a = document.createElement('div'); a.className = 'msg a'; a.innerHTML = '<span class="spin"></span> reading the database…'; log.append(a);
+    a.scrollIntoView({ block: 'end' });
+    try {
+      const r = await (await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: q, material: this.material, page: location.pathname, context: (document.getElementById('aiCtx') || {}).textContent || '' }) })).json();
+      a.innerHTML = `<div class="mode"><span class="kind AI">AI indication</span> ${esc(r.mode)} · ${r.sources.length} parts used</div>${this.linkify(r.answer)}` +
+        (r.sources.length ? `<details style="margin-top:8px"><summary class="small muted">Records used</summary>${r.sources.map(s => `<div class="small"><a href="/parts/${s.material}">${s.material}</a> ${esc(s.description)} · ${s.action}</div>`).join('')}</details>` : '') +
+        `<div class="small muted" style="margin-top:6px">Limits: synthetic data; recommendations come from the team engine, not from the AI. A person decides.</div>`;
+    } catch (e) { a.textContent = 'Request failed: ' + e; }
+    a.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  },
+};
+AI.init();
+</script>
+{% block scripts %}{% endblock %}
+<script src="{{ url_for('static', filename='motion.js') }}"></script>
+<script>
+document.addEventListener('change', e => {   // server-paged tables: rows per page
+  if (!e.target.matches('select.pg-sel') || e.target.closest('#partsApp')) return;
+  const u = new URL(location.href); u.searchParams.set('per', e.target.value); u.searchParams.set('page', 1); location.href = u.pathname + u.search;
+});
+(() => {   // client tables: show 20 rows, the reader picks more
+  document.querySelectorAll('.table-wrap').forEach(w => {
+    if (w.closest('[data-server]') || w.hasAttribute('data-server')) return;
+    const t = w.querySelector('table'); if (!t) return;
+    const rows = [...t.querySelectorAll('tr')].filter(r => r.querySelector('td'));
+    if (rows.length <= 20) return;
+    const bar = document.createElement('div'); bar.className = 'pg pg-client';
+    const show = n => { rows.forEach((r, i) => r.hidden = i >= n);
+      bar.innerHTML = `<span class="pg-info">Showing <b>${Math.min(n, rows.length)}</b> of <b>${rows.length}</b></span>
+        <label class="pg-per">Rows <select class="pg-cl" aria-label="Rows shown">${[20, 50, 100].filter(v => v < rows.length).concat([rows.length])
+          .map(v => `<option value="${v}" ${v === n ? 'selected' : ''}>${v === rows.length ? 'All' : v}</option>`).join('')}</select></label>`;
+      bar.querySelector('select').onchange = ev => show(+ev.target.value); window.enhanceSelects && enhanceSelects(bar); };
+    show(20); w.after(bar);
+  });
+})();
+</script>
+<script>
+window.numberTables = function (root) {   // a "#" column on every data table, numbered across pages
+  (root || document).querySelectorAll('.table-wrap table').forEach(t => {
+    if (t.dataset.numbered) return;
+    const rows = [...t.querySelectorAll('tr')], head = rows.find(r => r.querySelector('th'));
+    const body = rows.filter(r => r.querySelector('td') && !(r.cells.length === 1 && r.cells[0].colSpan > 1));
+    if (!head || !body.length) return;
+    t.dataset.numbered = 1;
+    const off = +(t.closest('[data-offset]')?.dataset.offset || 0);
+    const th = document.createElement('th'); th.className = 'rn'; th.textContent = '#'; head.prepend(th);
+    rows.filter(r => r !== head && !body.includes(r)).forEach(r => { if (r.cells[0]) r.cells[0].colSpan = (r.cells[0].colSpan || 1) + 1; });
+    body.forEach((r, i) => { const td = document.createElement('td'); td.className = 'rn'; td.textContent = off + i + 1; r.prepend(td); });
+  });
+};
+numberTables();
+</script>
+<script>
+window.enhanceSelects = function (root) {
+  (root || document).querySelectorAll('main select:not([hidden]):not([data-ns])').forEach(sel => {
+    if (sel.closest('[hidden]') || sel.offsetParent === null && !sel.closest('.hm-pop')) { /* hidden now: still enhance, it may show later */ }
+    sel.dataset.ns = 1;
+    const box = document.createElement('div'); box.className = 'ns' + (sel.classList.contains('pg-sel') || sel.closest('.pg') ? ' sm' : '');
+    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'ns-btn'; btn.setAttribute('aria-haspopup', 'listbox');
+    if (sel.getAttribute('aria-label')) btn.setAttribute('aria-label', sel.getAttribute('aria-label'));
+    const pop = document.createElement('ul'); pop.className = 'ns-pop'; pop.setAttribute('role', 'listbox');
+    sel.parentNode.insertBefore(box, sel); box.append(sel, btn, pop);
+    const label = () => { const o = sel.options[sel.selectedIndex]; btn.innerHTML = `<span>${o ? o.text : ''}</span><i class="fa-solid fa-chevron-down"></i>`; };
+    const build = () => { pop.innerHTML = [...sel.options].map((o, i) => `<li role="option" data-i="${i}" class="${i === sel.selectedIndex ? 'on' : ''}" aria-selected="${i === sel.selectedIndex}">${o.text}</li>`).join(''); };
+    let hi = -1;
+    const mark = () => pop.querySelectorAll('li').forEach((li, i) => li.classList.toggle('hi', i === hi));
+    const close = () => { box.classList.remove('open'); };
+    const open = () => { document.querySelectorAll('.ns.open').forEach(x => x !== box && x.classList.remove('open')); build(); hi = sel.selectedIndex; mark();
+      const r = btn.getBoundingClientRect(), up = innerHeight - r.bottom < 270 && r.top > 270;
+      Object.assign(pop.style, { position: 'fixed', left: r.left + 'px', minWidth: r.width + 'px', maxWidth: Math.max(r.width, Math.min(560, innerWidth - r.left - 16)) + 'px',
+        top: up ? 'auto' : (r.bottom + 6) + 'px', bottom: up ? (innerHeight - r.top + 6) + 'px' : 'auto' });
+      box.classList.toggle('up', up); box.classList.add('open');
+      const on = pop.querySelector('li.on'); if (on) on.scrollIntoView({ block: 'nearest' }); };
+    const pick = i => { if (i < 0) return; if (sel.selectedIndex !== i) { sel.selectedIndex = i; sel.dispatchEvent(new Event('change', { bubbles: true })); } label(); close(); btn.focus(); };
+    btn.onclick = e => { e.stopPropagation(); box.classList.contains('open') ? close() : open(); };
+    pop.onclick = e => { const li = e.target.closest('li'); if (li) { e.stopPropagation(); pick(+li.dataset.i); } };
+    btn.onkeydown = e => {
+      const n = sel.options.length;
+      if (['ArrowDown', 'ArrowUp'].includes(e.key)) { e.preventDefault(); if (!box.classList.contains('open')) open(); hi = (hi + (e.key === 'ArrowDown' ? 1 : -1) + n) % n; mark(); pop.querySelectorAll('li')[hi]?.scrollIntoView({ block: 'nearest' }); }
+      else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); box.classList.contains('open') ? pick(hi) : open(); }
+      else if (e.key === 'Escape') close();
+    };
+    sel.addEventListener('change', label);
+    label();
+  });
+};
+document.addEventListener('click', () => document.querySelectorAll('.ns.open').forEach(x => x.classList.remove('open')));
+addEventListener('scroll', e => { if (!e.target.closest || !e.target.closest('.ns-pop')) document.querySelectorAll('.ns.open').forEach(x => x.classList.remove('open')); }, true);
+addEventListener('resize', () => document.querySelectorAll('.ns.open').forEach(x => x.classList.remove('open')));
+enhanceSelects();
+</script>
+<script>
+
+</script>
+</body>
+</html>

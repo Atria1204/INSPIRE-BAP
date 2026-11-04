@@ -1,0 +1,12 @@
+data/raw/
+pipeline/
+belajar/
+exports/
+exports.zip
+data/decisions.db
+data/aether_spare_next.db
+data/aether_spare_prev.db
+.env
+.impeccable/
+make_zip.py
+__pycache__/

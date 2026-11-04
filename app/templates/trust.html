@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status, banner, src %}
+{% block title %}Data Trust · INSpire{% endblock %}
+{% block content %}
+{{ banner("Data Trust", "Where every number comes from: the six source files, the cleaning steps, the rules, the assumptions and the definitions still open with the case owner.",
+          '<span class="b b-MEDIUM"><i class="fa-solid fa-flask-vial"></i> Synthetic CALIBER 2026 data</span>') }}
+
+{% set w = ck.wo_bom_match %}
+<section class="kc-row kc-3" style="margin-top:16px">
+  <div class="kc green"><span class="kc-h"><span class="kc-ic"><i class="fa-solid fa-link"></i></span><span class="kc-t">Work order to BoM match</span>{{ src("wo_bom_match") }}</span>
+    <span class="kc-v">{{ (100 * w.value / w.value2)|round(1) }}%<small>{{ w.value|num }} of {{ w.value2|num }} parts used on a job are in that equipment's BoM</small></span>
+    <span class="kc-bar"><i style="flex:{{ w.value }}" class="c1"></i><i style="flex:{{ w.value2 - w.value }}" class="c2"></i></span></div>
+  <div class="kc violet"><span class="kc-h"><span class="kc-ic"><i class="fa-solid fa-clone"></i></span><span class="kc-t">PR PO duplicates removed</span></span>
+    <span class="kc-v">5,420<small>exact copies of the same document line (DEF-01)</small></span></div>
+  <div class="kc blue"><span class="kc-h"><span class="kc-ic"><i class="fa-solid fa-circle-question"></i></span><span class="kc-t">Open questions to the case owner</span></span>
+    <span class="kc-v">{{ defs|selectattr('status','equalto','Open')|list|length }} of {{ defs|length }}<small>see the definitions register below</small></span></div>
+</section>
+
+<div class="card panel" style="margin-top:18px">
+  <div class="panel-head"><div><div class="title">Counts checked against the team data pipeline</div>
+    <div class="sub">This database vs final-caliber26-aetherxinspire (handover addendum C) · {{ recon|selectattr(1)|list|length }} rows</div></div>{{ src("evidence") }}</div>
+  <div class="panel-body"><table class="tbl recon">
+    <thead><tr><th>Population</th><th class="num">This app</th><th class="num">Team pipeline</th><th>Used for</th><th></th></tr></thead>
+    <tbody>{% for label, ours, lead, use in recon %}<tr><td>{{ label }}</td><td class="num"><b>{{ ours|num }}</b></td><td class="num">{{ lead|num }}</td>
+      <td class="faint small">{{ use }}</td><td>{% if ours == lead %}<span class="ok"><i class="fa-solid fa-check"></i> match</span>{% else %}<span class="bad">differs</span>{% endif %}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+
+<div class="card panel" style="margin-top:18px">
+  <div class="panel-head"><div><div class="title">From six files to one decision per part</div><div class="sub">pipeline/build_db.py and pipeline/build_context.py</div></div></div>
+  <div class="panel-body"><div class="steps">
+    <div><b>Clean</b>Remove PR PO and BoM exact duplicates, keep Movement duplicates (flagged), parse dates, convert currencies to IDR.</div>
+    <div><b>Link</b>Part → functional locations (BoM) → class, notifications, PM plans; part → issues (Movement) and purchase lines (PR PO).</div>
+    <div><b>Classify demand</b>ADI and CV² per part: smooth, erratic, intermittent, lumpy, or no issues (Syntetos &amp; Boylan, 2005).</div>
+    <div><b>Forecast</b>SES for smooth and erratic, SBA (Croston with bias correction) for intermittent and lumpy.</div>
+    <div><b>Simulate</b>2,000 Monte Carlo lead-time demands per part → reorder point at the class service level (Banks &amp; Carson, Ex. 2.11).</div>
+    <div><b>Flag</b>INSpire exception rules: below Min, Min below lead-time demand, Non Stock used, idle Stock Items.</div>
+    <div><b>Propose</b>One proposed action per rule hit, with the rule and its values.</div>
+    <div><b>Decide</b>A person accepts, works, closes; a second person verifies. Every step is logged.</div>
+  </div></div>
+</div>
+
+<div class="card panel" style="margin-top:16px">
+  <div class="panel-head"><div><div class="title">Open definitions (DEF register)</div><div class="sub">Questions for the case owner and the answer the team is working with</div></div></div>
+  <div class="table-wrap" style="max-height:none"><table>
+    <tr><th>ID</th><th>Field</th><th>Question</th><th>Status</th><th>Team position used in INSpire</th></tr>
+    {% for d in defs %}<tr><td class="mono">{{ d.def_id }}</td><td><b>{{ d.field }}</b></td><td class="small">{{ d.question }}</td>
+      <td><span class="b {{ {'Answered by team':'b-MAINTAIN','Proceeding on assumption':'b-MEDIUM','Open':'b-gray'}[d.status] }}">{{ d.status }}</span></td>
+      <td class="small">{{ d.team_answer }}</td></tr>{% endfor %}
+  </table></div>
+</div>
+
+<div class="grid two pack" style="margin-top:16px">
+  <div class="card panel">
+    <div class="panel-head"><div><div class="title">Command Center KPIs</div><div class="sub">Formula and label of each number</div></div></div>
+    <div class="table-wrap" style="max-height:none"><table><tr><th>KPI</th><th class="num">Value</th><th>Formula</th></tr>
+      {% for key, c in ck.items() %}<tr><td><b>{{ c.name }}</b><br><span class="kind {{ c.label }}">{{ c.label }}</span></td>
+        <td class="num">{{ c.value|num }}{% if c.value2 %}<br><span class="faint small">of {{ c.value2|num(1 if c.value2 < 100 else 0) }}</span>{% endif %}</td><td class="small">{{ c.formula }}</td></tr>{% endfor %}
+    </table></div>
+  </div>
+  <div class="card panel">
+    <div class="panel-head"><div><div class="title">Data-quality checks</div><div class="sub">Found in the supplied files</div></div></div>
+    <div class="table-wrap" style="max-height:none"><table><tr><th>File</th><th>Issue</th><th class="num">Rows</th><th>Treatment</th></tr>
+      {% for q in quality %}<tr><td>{{ q.file }}</td><td class="small">{{ q.issue }}</td><td class="num">{{ q.rows_affected|num }}<br><span class="faint small">of {{ q.rows_total|num }}</span></td><td class="small">{{ q.treatment }}</td></tr>{% endfor %}
+    </table></div>
+  </div>
+</div>
+
+<div class="grid two pack" style="margin-top:16px">
+  <div class="card panel">
+    <div class="panel-head"><div><div class="title">Assumptions</div><div class="sub">Values the data does not give</div></div><span class="kind Assumption">Assumption</span></div>
+    <div class="table-wrap" style="max-height:520px"><table>{% for a in assumptions %}<tr><td style="width:36%"><b>{{ a.key }}</b><br><span class="small">{{ a.value }}</span></td><td class="small muted">{{ a.note }}</td></tr>{% endfor %}</table></div>
+  </div>
+  <div>
+    <div class="card panel">
+      <div class="panel-head"><div><div class="title">Database tables (SQLite)</div><div class="sub">raw_* = cleaned source files (Observed); others are derived</div></div></div>
+      <div class="table-wrap" style="max-height:360px"><table><tr><th>Table</th><th class="num">Rows</th></tr>
+        {% for t in tables %}<tr><td class="mono">{{ t.table }}</td><td class="num">{{ t.rows|num }}</td></tr>{% endfor %}</table></div>
+    </div>
+    <div class="card panel" style="margin-top:16px">
+      <div class="panel-head"><div><div class="title">Latest decisions</div><div class="sub">Audit trail across all actions</div></div><a class="btn light" href="/actions">Action Center</a></div>
+      <div class="table-wrap" style="max-height:300px"><table><tr><th>When (UTC)</th><th>Action</th><th>Status</th><th>By</th></tr>
+        {% for e in events %}<tr><td class="small">{{ e.at }}</td><td><a href="/actions/{{ e.action_id }}" class="mono">{{ e.action_id }}</a></td><td>{{ status(e.status) }}</td><td class="small">{{ e.actor }} · {{ e.role }}</td></tr>
+        {% else %}<tr><td colspan="4" class="muted">No decisions recorded yet.</td></tr>{% endfor %}</table></div>
+    </div>
+
+  </div>
+</div>
+<div class="card panel" style="margin-top:16px">
+  <div class="panel-head"><div><div class="title">Copilot log</div><div class="sub">Every question, the parts it used and the answer (assistant_log)</div></div></div>
+  <div class="table-wrap"><table class="ailog"><tr><th>When (UTC)</th><th>Question and answer</th><th>Mode</th><th>Parts used</th></tr>
+    {% for q in ai_log %}<tr><td class="small nowrap">{{ q.at }}</td><td class="small"><details><summary>{{ q.question }}</summary><div class="faint small" style="white-space:pre-wrap;margin-top:6px">{{ q.answer }}</div></details></td>
+      <td class="small">{{ q.mode }}</td><td class="mono small">{{ (q.parts_used or '–')|replace(',', ', ') }}</td></tr>
+    {% else %}<tr><td colspan="4" class="muted">No questions asked yet.</td></tr>{% endfor %}</table></div>
+</div>
+{% endblock %}

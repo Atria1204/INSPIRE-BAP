@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+{% from "_macros.html" import tag, cls, act %}
+{% block title %}Overview · INSpire{% endblock %}
+{% block content %}
+{% set crit_wait = k.critical_empty - k.critical_empty_likely %}
+{% set reorder_n = e.reorder %}
+{% set capital = k.free_review + k.free_reduce %}
+<div class="fleet space-y-6">
+
+<!-- ============ header (AETHER page banner + toolbar) ============ -->
+<header class="page-banner">
+  <div>
+    <p class="page-banner-label">Chandra Asri · spare parts · stock as of 1 Oct 2026</p>
+    <h1 class="page-banner-title">Spare Part Overview</h1>
+    <p class="page-banner-meta">{{ k.parts|num }} parts · {{ s.parts|num }} used in the last 17 months · recommendations from engine run {{ e.run_id }}</p>
+  </div>
+</header>
+<select id="layer" hidden><option value="risk">Stockout risk</option><option value="capital">Capital tied up</option><option value="sim">Simulated year</option></select>
+<select id="policy" hidden><option value="current">Current</option><option value="recommended">Recommended</option></select>
+
+<!-- ============ KPI cards: each bar is the real breakdown of its number ============ -->
+<section aria-label="Site totals" class="kc-row">
+  <a class="kc red" href="/parts?stockout_risk=HIGH&sort=risk">
+    <span class="kc-h"><span class="kc-t">Shortfall risk, simulated</span>{{ tag("engine_risk") }}</span>
+    <span class="kc-v">{{ e.high|num }}<small>Grade A parts, high risk today</small></span>
+    <span class="kc-bar"><i style="flex:{{ e.high }}" class="c1"></i><i style="flex:{{ e.medium }}" class="c2"></i><i style="flex:{{ e.low }}" class="c3"></i></span>
+    <span class="kc-l"><span><i class="c1"></i>high <b>{{ e.high }}</b></span><span><i class="c2"></i>medium <b>{{ e.medium }}</b></span><span><i class="c3"></i>low <b>{{ e.low }}</b></span></span>
+  </a>
+  <a class="kc blue" href="/actions">
+    <span class="kc-h"><span class="kc-t">Recommended actions</span>{{ tag("engine_rec") }}</span>
+    <span class="kc-v">{{ e.params|num }}<small>candidates for review, Grade A parts</small></span>
+    <span class="kc-bar"><i style="flex:{{ e.reorder }}" class="kA"></i><i style="flex:{{ e.reduce }}" class="kS"></i><i style="flex:{{ e.hold }}" class="kC"></i></span>
+    <span class="kc-l"><span><i class="kA"></i>reorder <b>{{ e.reorder }}</b></span><span><i class="kS"></i>reduce <b>{{ e.reduce }}</b></span><span><i class="kC"></i>maintain <b>{{ e.hold }}</b></span></span>
+  </a>
+  <a class="kc violet" href="/parts?grade_a=1">
+    <span class="kc-h"><span class="kc-t">Evidence first</span>{{ tag("engine_grade") }}</span>
+    <span class="kc-v">{{ e.params|num }} of 7,481<small>parts get proposed parameters</small></span>
+    <span class="kc-bar"><i style="flex:{{ e.params }}" class="c1"></i><i style="flex:{{ e.monitor }}" class="c2"></i><i style="flex:{{ e.noact }}" class="c3"></i></span>
+    <span class="kc-l"><span><i class="c1"></i>parameters <b>{{ e.params }}</b></span><span><i class="c2"></i>monitor <b>{{ e.monitor|num }}</b></span><span><i class="c3"></i>no action <b>{{ e.noact|num }}</b></span></span>
+  </a>
+  <a class="kc green" href="/twin/replay">
+    <span class="kc-h"><span class="kc-t">Held-out test, simulated</span>{{ tag("engine_ho") }}</span>
+    <span class="kc-v">{{ e.ho.R0.n|int }} → {{ e.ho.X2.n|int }}<small>of {{ e.ho.X2.d|int }} parts with a shortage, today vs X2</small></span>
+    <span class="kc-bar"><i style="flex:{{ e.ho.X2.n }}" class="c1"></i><i style="flex:{{ e.ho.R0.n - e.ho.X2.n }}" class="c2"></i></span>
+    <span class="kc-l"><span><i class="c2"></i>today <b>{{ e.ho_range.R0.lo|int }}–{{ e.ho_range.R0.hi|int }}</b></span><span><i class="c1"></i>X2 <b>{{ e.ho_range.X2.lo|int }}–{{ e.ho_range.X2.hi|int }}</b> across 12 scenarios</span></span>
+  </a>
+</section>
+
+<!-- ============ featured: act first ============ -->
+<section aria-label="Act first" class="panel panel-featured">
+  <div class="featured-head">
+    <div class="flex items-center justify-between gap-2"><h2 class="featured-title">Act first: 5 Reorder candidates</h2><span class="featured-count">{{ risk|length }}</span></div>
+    <p class="featured-sub">Engine Reorder candidates with the highest simulated shortfall probability under the recorded Min/Max. Click one to see why, then approve or reject it.</p>
+  </div>
+  <ol class="ov-heroes">
+    {% for r in risk %}
+    <li><a class="hero-row" href="/parts/{{ r.material }}">
+      <span class="flex items-center justify-between gap-2"><span class="hero-rank{{ ' rank-top' if loop.first }}">#{{ loop.index }}</span><span class="ov-p">{{ r.p_stockout|pct }} <small>shortfall</small></span></span>
+      <span class="af-name" title="{{ r.description }}">{{ r.description }}</span>
+      <span class="af-meta">{{ r.material }} · class {{ r.criticality }}</span>
+      <span class="af-grid"><span><small>Stock</small><b>{{ r.stock|num }}</b></span><span><small>Proposed s / S (X2)</small><b>{{ r.rec_min }} / {{ r.rec_max }}</b></span></span>
+      <span class="hero-open">{{ act(r.action, r.action_qty) }}</span>
+    </a></li>{% endfor %}
+  </ol>
+</section>
+
+<!-- ============ cascade: twin | zones (one card, one story) ============ -->
+<section class="panel ov-cascade" aria-label="Where the problem is">
+  <div class="ov-twin-col" id="twin">
+    <div class="col-head"><h2 class="panel-title"><span class="legend-key" style="background:var(--c-loss)"></span>Site twin</h2>
+      <p class="panel-sub">Schematic, not a map: zones = equipment families, no bin or route data · click a building</p></div>
+    <div class="site-twin">
+      <div class="st-toolbar"><span class="st-legend" id="legend"></span>
+        <div class="st-group"><button type="button" class="st-btn" id="zin" aria-label="Zoom in"><i class="fa-solid fa-plus"></i></button>
+          <button type="button" class="st-btn" id="zout" aria-label="Zoom out"><i class="fa-solid fa-minus"></i></button>
+          <button type="button" class="st-btn" id="zreset" aria-label="Reset view"><i class="fa-solid fa-expand"></i></button></div></div>
+      <div class="st-scene"><div id="scene"></div><div id="fx"></div></div>
+      <div class="st-player">
+        <button type="button" class="st-play" id="play" aria-label="Play the simulated year"><i class="fa-solid fa-play"></i></button>
+        <input type="range" id="day" min="0" max="364" value="0" aria-label="Day of the simulated year">
+        <span class="st-day" id="dayLbl">Day 1</span><span class="st-out" id="outLbl">Press play</span>
+        <span class="st-pol"><span class="seg-cap">Min/Max</span><div class="seg-row" data-for="policy" role="group" aria-label="Min/Max used">
+        <button type="button" data-v="current" class="sg cur" title="Min/Max recorded today"><i class="fa-solid fa-clock-rotate-left"></i> Today</button>
+        <button type="button" data-v="recommended" class="sg rec" title="INSpire Min/Max"><i class="fa-solid fa-wand-magic-sparkles"></i> INSpire</button></div></span>
+      </div>
+    </div>
+  </div>
+  <div class="ov-zone-col">
+    <div class="col-head zm-head"><div><h2 class="panel-title"><span class="legend-key" style="background:var(--c-loss)"></span>Zones</h2>
+      <p class="panel-sub" id="zoneSub">Class A/S parts likely to run out</p></div>
+      <button type="button" class="zm-reset" id="reset" title="Back to the start view"><i class="fa-solid fa-rotate-left"></i> Reset</button></div>
+    <div class="zx-seg" role="tablist" aria-label="Measure">
+      <button type="button" role="tab" data-layer="risk" class="r"><i class="fa-solid fa-triangle-exclamation"></i> Shortfall risk</button>
+      <button type="button" role="tab" data-layer="capital" class="p"><i class="fa-solid fa-coins"></i> Above Max</button>
+      <button type="button" role="tab" data-layer="sim" class="g"><i class="fa-solid fa-calendar-day"></i> Short today</button></div>
+    <div id="zoneList" class="zx" aria-label="Zones ranked"></div>
+    <div id="zoneDetail" class="zd" hidden></div>
+  </div>
+</section>
+
+
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='site.js') }}"></script>
+<script>
+const S = {{ s|tojson }};
+const SHORT = ['Rotating', 'Valves', 'Instruments', 'Heat transfer', 'Static & piping'];
+const FAM = ['Pumps · motors · compressors', 'Control & safety valves', 'Instruments · electrical', 'Exchangers · furnaces', 'Vessels · piping · tanks'];
+const zones = S.zones.map((z, i) => ({ ...z, short: SHORT[i], family: FAM[i] }));
+const VIEW = [-30, 40, 1390, 740];
+const st = { zones, tone: [], plantTone: [], pins: [], selected: null, hover: null, view: VIEW.slice(), layer: 'risk', policy: 'current', day: 0, timer: null };
+const el = document.getElementById('scene'), fx = document.getElementById('fx');
+const bil = v => (v / 1e9).toFixed(v >= 1e10 ? 0 : 1) + ' B';
+const rank = (vals, i) => { const r = vals.filter(v => v > vals[i]).length; return r === 0 ? 'crit' : r <= 2 ? 'warn' : 'ok'; };
+const key = () => st.policy === 'current' ? 'short_now' : 'short_rec';
+
+function metric(z) {                       // one number per zone, shared by the twin and the list
+  if (st.layer === 'risk') return { v: z.high, txt: String(z.high), unit: 'at risk' };
+  if (st.layer === 'capital') return { v: z.excess, txt: bil(z.excess), unit: 'above Max' };
+  const n = z[key()][st.day]; return { v: n, txt: String(n), unit: 'out today' };
+}
+function applyLayer() {
+  const vals = zones.map(z => metric(z).v);
+  st.pins = [];
+  if (st.layer === 'sim') {
+    st.tone = zones.map(z => { const f = z[key()][st.day] / z.parts; return f > .10 ? 'crit' : f > .05 ? 'warn' : 'ok'; });
+    st.plantTone = st.tone.slice();
+    zones.forEach((z, i) => { const n = z[key()][st.day]; if (n) st.pins.push({ i, where: 'plant', kind: 'crit', text: String(n) }); });
+    legend('<span class="lg crit"></span>&gt;10% out <span class="lg warn"></span>5–10% <span class="lg ok"></span>&lt;5% <span class="lg-sep"></span><i class="fa-solid fa-truck"></i> delivery <span class="lg cart"></span> part to a job');
+  } else {
+    st.tone = zones.map((_, i) => rank(vals, i)); st.plantTone = zones.map(() => 'ok');
+    zones.forEach((z, i) => st.pins.push({ i, where: 'hall', kind: st.layer === 'risk' ? 'crit' : 'warn', text: metric(z).txt.replace(' B', 'B') }));
+    legend(st.layer === 'risk' ? '<span class="lg crit"></span>worst <span class="lg warn"></span>next two <span class="lg ok"></span>others'
+                               : '<span class="lg crit"></span>most <span class="lg warn"></span>next two <span class="lg ok"></span>others');
+  }
+  draw(); list();
+}
+function legend(h) { document.getElementById('legend').innerHTML = h; }
+function draw() {
+  el.innerHTML = siteScene({ ...st, selected: st.selected ?? st.hover });
+  el.querySelectorAll('.st-obj, .st-pin').forEach(g => {
+    const z = g.dataset.zone; if (z === 'gate' || z === undefined) return;
+    g.addEventListener('click', () => select(+z));
+    g.addEventListener('mouseenter', () => hover(+z));
+    g.addEventListener('mouseleave', () => hover(null));
+  });
+}
+function list() {                          // AETHER ranked list: one measure, ranked, with its unit
+  const M = {
+    risk:    { tone: 'r', v: z => z.high, txt: z => z.high, unit: n => n === 1 ? 'part' : 'parts', head: 'Grade A parts at high simulated shortfall risk (engine)' },
+    capital: { tone: 'p', v: z => z.excess, txt: z => z.excess, unit: n => (n === 1 ? 'part' : 'parts') + ' above Max', head: 'Parts with recorded stock above the recorded Max (engine flag)' },
+    sim:     { tone: 'g', v: z => z[key()][st.day], txt: z => z[key()][st.day], unit: n => (n === 1 ? 'part' : 'parts') + ' short',
+               head: `Parts out of stock on simulated day ${st.day + 1}, ${st.policy === 'current' ? 'today' : 'INSpire'} Min/Max` } };
+  const m = M[st.layer];
+  const rows = zones.map((z, i) => ({ z, i, v: m.v(z) })).sort((a, b) => b.v - a.v);
+  const max = Math.max(...rows.map(r => r.v)) || 1, total = rows.reduce((a, r) => a + r.v, 0);
+  document.getElementById('zoneSub').textContent = m.head;
+  document.querySelectorAll('.zx-seg button').forEach(b => { const on = b.dataset.layer === st.layer; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+  const el = document.getElementById('zoneList'); el.dataset.tone = m.tone;
+  el.innerHTML = rows.map((r, k) => `<button type="button" class="zx-row${st.selected != null && st.selected !== r.i ? ' is-dimmed' : ''}${st.selected === r.i ? ' is-sel' : ''}" data-zone="${r.i}" aria-pressed="${st.selected === r.i}">
+      <span class="zx-rank">${k + 1}</span><span class="zx-name">${r.z.short}</span>
+      <span class="zx-track"><span style="transform:scaleX(${(r.v / max).toFixed(4)})"></span></span>
+      <span class="zx-val"><b>${m.txt(r.z)}</b><small>${m.unit(r.v)}</small></span></button>`).join('') +
+    `<div class="zx-total"><span>All zones</span><b>${total}</b><small>${m.unit(total)}</small></div>`;
+  el.querySelectorAll('.zx-row').forEach(b => {
+    b.onclick = () => select(+b.dataset.zone);
+    b.onmouseenter = () => hover(+b.dataset.zone); b.onmouseleave = () => hover(null);
+  });
+  detail(st.selected ?? rows[0].i, st.selected == null, rows, total);
+}
+function hover(i) { if (st.hover === i) return; st.hover = i; if (st.selected == null) draw();
+  document.querySelectorAll('#zoneList .zx-row').forEach(b => b.classList.toggle('is-hl', +b.dataset.zone === i)); }
+function select(i) { st.selected = st.selected === i ? null : i; draw(); list(); }
+function detail(i, preview, rows, total) {   // the selected zone, in plain words
+  const d = document.getElementById('zoneDetail'), z = zones[i];
+  rows = rows || zones.map((zz, k) => ({ z: zz, i: k }));
+  const rank = rows.findIndex(r => r.i === i) + 1;
+  const share = (v, t) => t ? Math.round(100 * v / t) : 0;
+  const say = {
+    risk: `<b>${z.high}</b> of the ${total} high-risk Grade A parts sit here (${share(z.high, total)}%).`,
+    capital: `<b>${z.excess}</b> of the ${total} parts stocked above their recorded Max sit here (${share(z.excess, total)}%).`,
+    sim: `<b>${z[key()][st.day]}</b> parts are short here on day ${st.day + 1}. Over the year: ${z.avg_now.toFixed(0)} per day with today's Min/Max, ${z.avg_rec.toFixed(0)} with INSpire.` }[st.layer];
+  d.hidden = false; d.dataset.layer = st.layer;
+  d.innerHTML = `<div class="zy-head"><div><span class="zy-k">${preview ? 'Rank 1 on this measure' : 'Selected zone · rank ' + rank}</span><b>${esc(z.zone)}</b></div>
+      ${preview ? '' : '<button type="button" class="zd-x" aria-label="Back to the top zone">×</button>'}</div>
+    <p class="zy-say">${say}</p>
+    <p class="zy-k2">Most urgent parts here</p>
+    <ol class="zy-list">${z.top.slice(0, 3).map(p => `<li><a href="/parts/${p.material}"><span class="b b-cls ${p.criticality}">${p.criticality}</span>
+      <span class="zy-d">${esc(p.description)}<small>stock ${p.stock} · new Min/Max ${p.rec_min}/${p.rec_max}</small></span><b>${Math.round(p.p_stockout * 100)}%<small>run-out</small></b></a></li>`).join('')}</ol>
+    <a class="zy-all" href="/parts?category=${encodeURIComponent(z.cats[0])}&sort=risk">Open all ${esc(z.short)} parts <i class="fa-solid fa-arrow-right"></i></a>`;
+  const x = d.querySelector('.zd-x'); if (x) x.onclick = () => select(i);
+}
+// vehicles: deliveries and issues from the simulated year
+const flow = () => st.policy === 'current' ? 'flow_now' : 'flow_rec';
+let truckBusy = false;
+function moveVehicles(d) {
+  const f = zones.map(z => z[flow()]);
+  if (!truckBusy) {
+    let best = null, bestN = 0;
+    zones.forEach((_, i) => { let n = 0; for (let k = d; k < Math.min(365, d + 7); k++) n += f[i].recv[k]; if (n > bestN) { bestN = n; best = i; } });
+    if (best != null) {
+      truckBusy = true;
+      const [dx, dy] = truckShift(best), t = document.getElementById('truck');
+      t.style.transform = `translate(${dx}px, ${dy}px)`;
+      setTimeout(() => { t.style.transform = 'translate(0,0)'; setTimeout(() => truckBusy = false, 650); }, 900);
+    }
+  }
+  document.querySelectorAll('.st-cart').forEach(c => {
+    const i = +c.dataset.zone;
+    if (f[i].issue[d] && !c.classList.contains('go')) { c.classList.add('go'); setTimeout(() => c.classList.remove('go'), 700); }
+  });
+}
+const dayIn = document.getElementById('day'), layerSel = document.getElementById('layer'), polSel = document.getElementById('policy');
+function setDay(d) {
+  st.day = d; dayIn.value = d; document.getElementById('dayLbl').textContent = `Day ${d + 1} of 365`;
+  if (st.layer !== 'sim') { st.layer = 'sim'; layerSel.value = 'sim'; }
+  applyLayer(); moveVehicles(d);
+  document.getElementById('outLbl').innerHTML = `<b>${(st.policy === 'current' ? S.total_now : S.total_rec)[d]}</b> parts short (simulated)`;
+}
+dayIn.oninput = e => setDay(+e.target.value);
+polSel.onchange = () => { st.policy = polSel.value; setDay(st.day); };
+document.querySelectorAll('.zx-seg button').forEach(b => b.onclick = () => { layerSel.value = b.dataset.layer; layerSel.dispatchEvent(new Event('change')); });
+layerSel.onchange = () => { st.layer = layerSel.value; if (st.layer === 'sim') setDay(st.day); else applyLayer(); };
+document.getElementById('play').onclick = function () {
+  if (st.timer) { clearInterval(st.timer); st.timer = null; this.innerHTML = '<i class="fa-solid fa-play"></i>'; return; }
+  this.innerHTML = '<i class="fa-solid fa-pause"></i>';
+  st.timer = setInterval(() => { const d = st.day >= 364 ? 0 : st.day + 1; setDay(d);
+    if (d === 364) { clearInterval(st.timer); st.timer = null; this.innerHTML = '<i class="fa-solid fa-play"></i>'; } }, 90);
+};
+document.getElementById('reset').onclick = () => {
+  if (st.timer) document.getElementById('play').click();
+  Object.assign(st, { layer: 'risk', policy: 'current', day: 0, selected: null }); layerSel.value = 'risk'; polSel.value = 'current'; dayIn.value = 0;
+  document.getElementById('dayLbl').textContent = 'Day 1'; document.getElementById('outLbl').textContent = 'Press play'; setView(VIEW.slice()); applyLayer();
+};
+const setView = v => { st.view = v; draw(); fx.querySelector('svg').setAttribute('viewBox', v.join(' ')); };
+const zoom = f => { const [x, y, w, h] = st.view, nw = w * f, nh = h * f; setView([x + (w - nw) / 2, y + (h - nh) / 2, nw, nh]); };
+document.getElementById('zin').onclick = () => zoom(.82);
+document.getElementById('zout').onclick = () => zoom(1.2);
+document.getElementById('zreset').onclick = () => setView(VIEW.slice());
+fx.innerHTML = fxLayer(st.view, zones.length);
+applyLayer();
+const q = new URLSearchParams(location.search);            // demo deep links: /?layer=sim&day=200&zone=1&policy=recommended
+if (q.get('policy') === 'recommended') { st.policy = 'recommended'; polSel.value = 'recommended'; }
+if (q.get('layer')) { st.layer = q.get('layer'); layerSel.value = st.layer; applyLayer(); }
+if (q.get('day')) setDay(Math.max(0, Math.min(364, +q.get('day') - 1)));
+if (q.get('zone')) select(+q.get('zone'));
+</script>
+<script>
+(() => {   // segmented buttons drive the hidden selects; the selects stay the single source of state
+  const rows = document.querySelectorAll('.seg-row');
+  const sync = () => rows.forEach(r => { const v = document.getElementById(r.dataset.for).value;
+    r.querySelectorAll('.sg').forEach(b => { b.classList.toggle('on', b.dataset.v === v); b.setAttribute('aria-pressed', b.dataset.v === v); }); });
+  rows.forEach(r => r.querySelectorAll('.sg').forEach(b => b.addEventListener('click', () => {
+    const sel = document.getElementById(r.dataset.for); if (sel.value === b.dataset.v) return;
+    sel.value = b.dataset.v; sel.dispatchEvent(new Event('change')); sync(); })));
+  sync(); setInterval(sync, 250);   // play / reset / deep links change the selects in code
+})();
+</script>
+{% endblock %}

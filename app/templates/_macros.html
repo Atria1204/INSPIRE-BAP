@@ -1,0 +1,37 @@
+{# Truth-label chip that also opens the provenance popover (source files, columns, rule). INSpire rule R6. #}
+{% macro src(key) -%}
+{%- set s = SOURCES[key] -%}
+<button type="button" class="src kind {{ s.kind }}" data-src="{{ key }}" aria-label="{{ s.kind }}: where {{ s.title }} comes from">{{ s.kind }} <i class="fa-solid fa-circle-info"></i></button>
+{%- endmacro %}
+
+{% macro cls(c) -%}<span class="b b-cls {{ c }}" title="Equipment class {{ c }}">{{ c }}</span>{%- endmacro %}
+
+{% macro act(a, qty=None, unit='') -%}<span class="b b-{{ a }}">{{ a|alabel }}{% if qty %} {{ qty|num }}{% if unit %} {{ unit }}{% endif %}{% endif %}</span>{%- endmacro %}
+
+{% macro simlabel() -%}<p class="sim-label"><i class="fa-solid fa-flask"></i> <b>SIMULATED under stated assumptions.</b> Not observed. Inputs unverified. Read as "if these assumptions held".</p>{%- endmacro %}
+
+{% macro pager(total, pg, per, args) -%}
+{%- set last = ((total - 1) // per) + 1 if total else 1 -%}
+{%- set d = args.to_dict() -%}{%- set _ = d.pop('page', None) -%}{%- set _ = d.update({'per': per}) -%}
+<nav class="pg" aria-label="Pages">
+  <span class="pg-info">Showing <b>{{ ((pg - 1) * per + 1) if total else 0 }}–{{ [pg * per, total]|min }}</b> of <b>{{ "{:,}".format(total) }}</b></span>
+  <label class="pg-per">Rows per page <select class="pg-sel" aria-label="Rows per page">{% for n in [20, 50, 100] %}<option value="{{ n }}" {{ 'selected' if n == per }}>{{ n }}</option>{% endfor %}</select></label>
+  <span class="pg-nav">
+    {% if pg > 1 %}<a class="pg-b" href="?{{ d|urlencode }}&page={{ pg - 1 }}" aria-label="Previous page"><i class="fa-solid fa-chevron-left"></i></a>{% else %}<span class="pg-b off"><i class="fa-solid fa-chevron-left"></i></span>{% endif %}
+    <span>Page <b>{{ pg }}</b> of {{ last }}</span>
+    {% if pg < last %}<a class="pg-b" href="?{{ d|urlencode }}&page={{ pg + 1 }}" aria-label="Next page"><i class="fa-solid fa-chevron-right"></i></a>{% else %}<span class="pg-b off"><i class="fa-solid fa-chevron-right"></i></span>{% endif %}
+  </span>
+</nav>
+{%- endmacro %}
+
+{% macro status(s) -%}<span class="st st-{{ s|replace(' ', '-') }}">{{ s }}</span>{%- endmacro %}
+
+{% macro banner(title, purpose, meta='', label='') -%}
+<header class="page-banner"><div>{% if label %}<p class="page-banner-label">{{ label }}</p>{% endif %}<h1 class="page-banner-title">{{ title }}</h1>
+  <p class="page-banner-meta">{{ purpose }}</p></div>{% if meta %}<div class="ae-banner-side">{{ meta|safe }}</div>{% endif %}</header>
+{%- endmacro %}
+
+{% macro tag(key) -%}
+{%- set s = SOURCES[key] -%}
+<button type="button" class="src truth-tag {{ 'truth-derived' if s.kind in ('Derived','Scenario') else ('truth-illustrative' if s.kind == 'Assumption' else '') }}" data-src="{{ key }}" aria-label="Where {{ s.title }} comes from">{{ s.kind }}</button>
+{%- endmacro %}

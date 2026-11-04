@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% from "_macros.html" import src, cls, banner %}
+{% block title %}Whole-warehouse scenarios · Policy Lab · INSpire{% endblock %}
+{% block content %}
+{{ banner("Whole-warehouse scenarios", "Change the service target per class and see stock needed against expected shortages. App calculation, illustrative: money uses PO prices and an unapproved holding rate (D-09, D-10).",
+          '<a class="btn light" href="/policy"><i class="fa-solid fa-flask"></i> Single-part simulation</a>') }}
+
+<div class="card panel">
+  <div class="panel-head"><div><div class="title">Target service level per class</div><div class="sub">Share of replenishment cycles in which stock covers demand until the next delivery</div></div>{{ src("service_level") }}</div>
+  <div class="filters">
+    {% for c, label in [('A','A · highest'),('S','S · special (safety)'),('B','B · medium'),('C','C · lowest')] %}
+    <label>{{ label }}<select data-cls="{{ c }}" onchange="runScenario()">
+      {% for l in levels %}<option value="{{ l }}" {{ 'selected' if l == base[c] }}>{{ '%.1f'|format(l*100) }}%</option>{% endfor %}</select></label>
+    {% endfor %}
+    <button class="btn light" type="button" onclick="resetLevels()">Back to recommended</button>
+  </div>
+</div>
+
+<div class="kpis" id="sc" style="margin-top:16px"></div>
+
+<div class="grid two" style="margin-top:16px">
+  <div class="card panel"><div class="panel-head"><div><div class="title">By class</div></div><span class="kind Scenario">Scenario</span></div><div class="table-wrap"><table id="byc"></table></div></div>
+  <div class="card panel">
+    <div class="panel-head"><div><div class="title">Three ready-made scenarios</div><div class="sub">Lean, recommended, high availability</div></div><span class="kind Scenario">Scenario</span></div>
+    <div class="table-wrap"><table class="scn">
+      <tr><th>Scenario</th><th>A · S · B · C</th><th class="num">Target value</th><th class="num">Holding / yr</th><th class="num">Buy now</th><th class="num">Stockouts</th></tr>
+      {% for s in presets %}
+      <tr><td><b>{{ s.name }}</b></td><td class="small">{% for c in 'ASBC' %}{{ '%g'|format(100 * s.levels[c]) }}{{ ' · ' if not loop.last }}{% endfor %} %</td>
+        <td class="num">{{ s.target_inventory_value|idr }}</td><td class="num">{{ s.holding_cost|idr }}</td>
+        <td class="num">{{ s.buy_now_value|idr }}</td><td class="num">{{ s.expected_stockouts_per_cycle|num(0) }}</td></tr>
+      {% endfor %}
+    </table></div>
+  </div>
+</div>
+<p class="note">Target inventory value ≈ (safety stock + half the order quantity) × unit price. Reorder points at each level come from the same Monte Carlo lead-time-demand simulation.
+  Expected stockouts per cycle = Σ (1 − service level) over parts. Parts never issued and the 2 implausible records are excluded.</p>
+{% endblock %}
+{% block scripts %}
+<script>
+const BASE = {{ base|tojson }};
+function levels() { const o = {}; document.querySelectorAll('[data-cls]').forEach(s => o[s.dataset.cls] = +s.value); return o; }
+function resetLevels() { document.querySelectorAll('[data-cls]').forEach(s => s.value = BASE[s.dataset.cls]); runScenario(); }
+async function runScenario() {
+  const r = await (await fetch('/api/scenario', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(levels()) })).json();
+  const card = (tone, label, value, sub) => `<div class="card kpi ${tone}"><div class="k-top"><span class="label">${label}</span><span class="kind Scenario">Scenario</span></div><div class="value">${value}</div><div class="sub">${sub}</div></div>`;
+  document.getElementById('sc').innerHTML =
+    card('', 'Target inventory value', fmtIDR(r.target_inventory_value), `today ${fmtIDR(r.current_value)} for these ${r.parts.toLocaleString()} parts`) +
+    card('loss', 'Holding cost per year', fmtIDR(r.holding_cost), `today ${fmtIDR(r.current_holding)}`) +
+    card('amber', 'Buy now', fmtIDR(r.buy_now_value), `${r.buy_now_parts.toLocaleString()} parts at or below the reorder point`) +
+    card('teal', 'Above the new max', fmtIDR(r.free_value), `${r.free_parts.toLocaleString()} parts`) +
+    card('crit', 'Expected stockouts per cycle', Math.round(r.expected_stockouts_per_cycle), 'parts out of stock before delivery, per cycle');
+  document.getElementById('byc').innerHTML = '<tr><th>Class</th><th class="num">Service level</th><th class="num">Parts</th><th class="num">Target value</th><th class="num">Need reorder</th></tr>' +
+    r.by_class.map(c => `<tr><td><span class="b b-cls ${c.class}">${c.class}</span></td><td class="num">${pct(c.service_level, 1)}</td><td class="num">${c.parts.toLocaleString()}</td><td class="num">${fmtIDR(c.target_value)}</td><td class="num">${c.buy_now.toLocaleString()}</td></tr>`).join('');
+}
+runScenario();
+</script>
+{% endblock %}

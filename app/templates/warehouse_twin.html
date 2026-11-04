@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% from "_macros.html" import simlabel, src, cls %}
+{% block title %}Warehouse replay · INSpire{% endblock %}
+{% block content %}
+<header class="page-banner">
+  <div><p class="page-banner-label">Digital twin · the whole warehouse</p>
+    <h1 class="page-banner-title">Warehouse replay</h1>
+    <p class="page-banner-meta">Engine held-out result first; below, the app's illustrative replay of every part in use for one simulated year</p></div>
+</header>
+{{ simlabel() }}
+<section class="card panel eng-ho">
+  <div class="md-head"><h2>Engine held-out test: parts with a simulated shortage</h2><p>{{ e.ho.X2.d|int }} Grade A parts, parameters from 2025-05 to 2026-03, replayed on 2026-04 to 2026-09 · demand A, view ED {{ src("engine_ho") }}</p></div>
+  <div class="eng-ho-grid">{% for pol, lab in [('R0','Recorded Min/Max'),('R2','Min + PR median'),('N1','Naive mean'),('X1','X1 90%'),('X2','X2 95%'),('X3','X3 98%')] %}{% set r = e.ho[pol] %}
+    <div class="{{ 'base' if pol == 'R0' else ('best' if pol == 'X2' else '') }}"><span>{{ lab }}</span><b>{{ r.n|int }} <small class="faint" style="font-size:12px">parts</small></b><i style="width:{{ (100 * r.n / e.ho.R0.n)|round(1) }}%"></i></div>{% endfor %}</div>
+  <p class="eng-note"><b>How to read:</b> each box counts the 197 Grade A parts that ran short at least once in the last 6 months when replayed with that policy; lower is better. Fewer shortages come with more stock on hand: median on-hand rises 1.56 to 2.58 times. Trade-off, not a free gain. The chart below is the app's own replay of all parts, illustrative only.</p>
+</section>
+
+<section class="kc-row kc-3">
+  <div class="kc red"><span class="kc-h"><span class="kc-ic"><i class="fa-solid fa-clock-rotate-left"></i></span><span class="kc-t">App replay · recorded Min/Max</span></span>
+    <span class="kc-v">{{ '%.0f'|format(w.avg_now) }}<small>parts out of stock per day, on average</small></span></div>
+  <div class="kc green"><span class="kc-h"><span class="kc-ic"><i class="fa-solid fa-wand-magic-sparkles"></i></span><span class="kc-t">App replay · proposed X2</span></span>
+    <span class="kc-v">{{ '%.0f'|format(w.avg_rec) }}<small>parts out of stock per day; X2 for the 228 Grade A, recorded for the rest</small></span></div>
+  <div class="kc blue"><span class="kc-h"><span class="kc-ic"><i class="fa-solid fa-arrow-trend-down"></i></span><span class="kc-t">Difference</span>{{ src("simulation") }}</span>
+    <span class="kc-v">−{{ '%.0f'|format(100 * (1 - w.avg_rec / w.avg_now)) }}%<small>{{ w.parts|num }} parts in use, one simulated year</small></span></div>
+</section>
+
+<section class="grid grid-cols-1 xl:grid-cols-12 gap-6" style="margin-top:20px">
+  <div class="panel xl:col-span-8 overflow-hidden fill-chart">
+    <div class="panel-head"><h2 class="panel-title"><span class="legend-key" style="background:var(--c-crit)"></span>Parts out of stock, day by day</h2>
+      <p class="panel-sub">Parts out of stock each day · red recorded Min/Max, green proposed X2 · same random demand</p></div>
+    <div class="p-5 fc-body"><div class="relative fc-box" style="min-height:320px"><canvas id="cWt"></canvas></div></div>
+  </div>
+  <div class="panel xl:col-span-4 overflow-hidden">
+    <div class="panel-head"><h2 class="panel-title"><span class="legend-key" style="background:var(--c-downtime)"></span>Biggest gains</h2>
+      <p class="panel-sub">Days out of stock per year: now → recommended</p></div>
+    <ol class="divide-y divide-slate-100">
+      {% for m in w.most_improved[:8] %}
+      <li><a href="/parts/{{ m.material }}" class="flex items-center gap-3 px-5 py-2.5 hover:bg-slate-50">
+        {{ cls(m.criticality) }}<span class="flex-1 min-w-0"><span class="block text-[13px] font-semibold text-slate-900 truncate">{{ m.description }}</span>
+        <span class="block text-[11.5px] text-slate-500">{{ m.zone }}</span></span>
+        <span class="text-[13px] tabular-nums whitespace-nowrap"><b class="text-[#b42f2f]">{{ m.days_now }}</b> → <b class="text-[#0d7a54]">{{ m.days_rec }}</b></span></a></li>
+      {% endfor %}
+    </ol>
+  </div>
+</section>
+
+<section class="panel overflow-hidden" style="margin-top:20px">
+  <div class="panel-head"><h2 class="panel-title">By storage zone</h2><p class="panel-sub">Zone = equipment family the parts serve {{ src("equipment_category") }}</p></div>
+  <table class="w-full text-[13px]">
+    <thead class="bg-slate-50 text-slate-500 text-[12px]"><tr><th class="text-left px-5 py-2">Zone</th><th class="text-right px-5">Parts</th><th class="text-right px-5">Class A/S</th>
+      <th class="text-right px-5">Stock value</th><th class="text-right px-5">Out per day, recorded (parts)</th><th class="text-right px-5">Out per day, X2 (parts)</th></tr></thead>
+    <tbody>{% for z in w.zones %}<tr class="border-t border-slate-100"><td class="px-5 py-2.5 font-semibold text-slate-900">{{ z.zone }}</td>
+      <td class="text-right px-5 tabular-nums">{{ z.parts }}</td><td class="text-right px-5 tabular-nums">{{ z.critical }}</td>
+      <td class="text-right px-5 tabular-nums">{{ z.value|idr }}</td>
+      <td class="text-right px-5 tabular-nums font-semibold text-[#b42f2f]">{{ '%.1f'|format(z.avg_now) }}</td>
+      <td class="text-right px-5 tabular-nums font-semibold text-[#0d7a54]">{{ '%.1f'|format(z.avg_rec) }}</td></tr>{% endfor %}</tbody>
+  </table>
+  <p class="px-5 py-3 text-[12px] text-slate-500">SIMULATED under stated assumptions (stock applies on day 0, no open orders at the start, Min = reorder level, Max = order-up-to, parts independent). Same random days for both policies. Schematic: the data has no rack locations, supplier locations or routes.</p>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+const W_DATA = {{ w|tojson }};
+const ch = new Chart(document.getElementById('cWt'), { type: 'line',
+  data: { labels: W_DATA.total_now.map((_, i) => i + 1), datasets: [
+    { label: 'Recorded Min/Max', data: W_DATA.total_now, borderColor: '#d03b3b', borderWidth: 2, pointRadius: 0, tension: .2 },
+    { label: 'Proposed X2', data: W_DATA.total_rec, borderColor: '#1baf7a', borderWidth: 2, pointRadius: 0, tension: .2 } ] },
+  options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'bottom' } },
+    scales: { x: { title: { display: true, text: 'Day of the simulated year' }, ticks: { maxTicksLimit: 12 }, grid: { display: false } },
+              y: { beginAtZero: true, title: { display: true, text: 'Parts out of stock' }, grid: { color: '#e2e8f0' } } } } });
+</script>
+{% endblock %}

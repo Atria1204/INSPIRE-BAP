@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "_macros.html" import src, cls, banner %}
+{% block title %}Rule checks · INSpire{% endblock %}
+{% set R = {
+  'min_below_ltd': {'tone':'crit','icon':'fa-hourglass-half','title':'Min below lead-time demand','rule':'Min smaller than what is used while waiting for delivery',
+                    'value': ck.min_below_ltd.value, 'of': ck.min_below_ltd.value2, 'of_label':'tested', 'show':'risk'},
+  'below_min': {'tone':'amber','icon':'fa-arrow-down','title':'Issued Stock Items below Min','rule':'Used, and now below its own Min',
+                'value': ck.below_min.value, 'of': k.stock_items - ck.idle_stock_item.value, 'of_label':'Stock Items in use', 'show':'risk'},
+  'nonstock_issued': {'tone':'blue','icon':'fa-box-open','title':'Non Stock parts used','rule':'Used, but no Min/Max, so never reordered',
+                      'value': ck.nonstock_issued.value, 'of': None, 'of_label': (ck.nonstock_issued.value2 ~ '% of all issue lines'), 'show':'use'},
+  'idle_stock_item': {'tone':'loss','icon':'fa-box-archive','title':'Idle Stock Items','rule':'On the shelf, not used in 17 months',
+                      'value': ck.idle_stock_item.value, 'of': k.stock_items, 'of_label':'Stock Items', 'show':'value'},
+} %}
+{% block content %}
+{{ banner("Rule checks", "Four stock rules applied to all 7,481 parts. Each card lists the worst parts that break the rule; open one to fix its Min/Max.", "", "Data checks") }}
+
+<section class="rc-grid">
+  {% for r in rules %}{% set d = R[r.key] %}
+  <article class="card rc {{ d.tone }}">
+    <a class="rc-top" href="/parts?{{ r.key }}=1&sort={{ 'value' if d.show == 'value' else 'risk' }}">
+      <span class="rc-title">{{ d.title }}</span>{{ src(r.key) }}
+    </a>
+    <div class="rc-num"><b>{{ d.value|num }} <em>parts</em></b>{% if d.of %}<span>of {{ d.of|num }} {{ d.of_label }}</span>{% else %}<span>{{ d.of_label }}</span>{% endif %}</div>
+    {% if d.of %}<div class="meter"><span style="width:{{ 100 * d.value / d.of }}%;background:var(--tone)"></span></div>{% endif %}
+    <p class="rc-rule"><b>Rule:</b> {{ d.rule }}</p>
+    <div class="rc-sub">Worst parts</div>
+    <ol class="rc-list">
+      {% for p in r['items'] %}
+      <li><a href="/parts/{{ p.material }}">{{ cls(p.criticality) }}<span class="rc-d">{{ p.description }}<small>stock {{ p.stock|num }} {{ p.unit }} · {% if p.action in ('REORDER','REDUCE','HOLD') %}X2 {{ p.rec_min }}/{{ p.rec_max }}{% else %}{{ p.action|alabel }}{% endif %}</small></span>
+        <b>{% if d.show == 'value' %}{{ p.stock_value_idr|idr }}{% elif d.show == 'use' %}{{ p.forecast_monthly|num(0) if p.forecast_monthly else "–" }}<small> {{ p.unit }}/mo</small>{% else %}{{ p.p_stockout|pct if p.p_stockout is not none else '–' }}{% endif %}</b></a></li>
+      {% endfor %}
+    </ol>
+    <a class="rc-all" href="/parts?{{ r.key }}=1&sort={{ 'value' if d.show == 'value' else 'risk' }}">All {{ r.total|num }} parts <i class="fa-solid fa-arrow-right"></i></a>
+  </article>
+  {% endfor %}
+</section>
+{% endblock %}

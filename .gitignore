@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+data/decisions.db
+.vercel/
+data/aether_spare_next.db
+data/aether_spare_prev.db
+
+.vercel

@@ -1,0 +1,5 @@
+﻿file,issue,rows_affected,rows_total,treatment
+PR PO,exact duplicate rows (same PR and PR item),5420,11609,removed
+BoM,exact duplicate rows,230,20653,removed
+Movement Material,"identical rows (same date, part, quantity, order)",863,17518,kept: may be two real issues; flagged for data owner
+BoM,Non Stock parts with stock on hand,1683,7481,"kept, flagged (counted per part)"

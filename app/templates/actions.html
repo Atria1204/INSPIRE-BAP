@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% from "_macros.html" import cls, status, banner, pager %}
+{% block title %}Action Center · INSpire{% endblock %}
+{% set TTONE = {'Reorder':'crit','Reduce':'loss','Maintain':'teal'} %}
+{% block content %}
+{{ banner("Action Center", "Review each proposed action: approve, defer or reject. Approved work is tracked until a second person verifies it.",
+          (s.total|num) ~ " actions · " ~ s.overdue ~ " overdue") }}
+
+{% set cur = args.get('status','') %}
+<nav class="flow-steps" aria-label="Action status">
+  <a href="/actions" class="fs-all {{ 'on' if not cur }}"><span>All</span><b>{{ s.total|num }}</b></a>
+  {% for st in ['Generated','Under review','Approved','In progress','Done','Verified closed'] %}
+  <a href="?status={{ st|urlencode }}" class="{{ 'on' if cur == st }}"><small>Step {{ loop.index }}</small><span>{{ st }}</span><b>{{ s.counts[st]|num }}</b></a>
+  {% if not loop.last %}<i class="fa-solid fa-chevron-right fs-arrow"></i>{% endif %}{% endfor %}
+  <a href="?status=Deferred" class="fs-side {{ 'on' if cur == 'Deferred' }}"><span>Deferred</span><b>{{ s.counts['Deferred']|num }}</b></a>
+  <a href="?status=Rejected" class="fs-side {{ 'on' if cur == 'Rejected' }}"><span>Rejected</span><b>{{ s.counts['Rejected']|num }}</b></a>
+</nav>
+<p class="note"><i class="fa-solid fa-circle-info"></i> Open an action, then move it one step: <b>Under review</b> → <b>Approved</b> (owner + due date) → <b>In progress</b> → <b>Done</b> (PR/PO number) → <b>Verified</b> by a second person. Reject or defer needs a reason.</p>
+
+<form class="card" method="get" style="margin-top:14px">
+  <div class="filters">
+    <label style="flex:1;min-width:200px">Search<input name="q" value="{{ args.get('q','') }}" placeholder="Part name or number"></label>
+    {% set v = args.get('type','') %}
+    <label>Type<select name="type" class="f-{{ TTONE.get(v,'blue') }} {{ 'is-set' if v }}" onchange="this.form.submit()"><option value="">All</option>
+      {% for t in types %}<option {{ 'selected' if v==t }}>{{ t }}</option>{% endfor %}</select></label>
+    {% set v = args.get('status','') %}
+    <label>Status<select name="status" class="f-violet {{ 'is-set' if v }}" onchange="this.form.submit()"><option value="">All</option>
+      {% for t in statuses %}<option {{ 'selected' if v==t }}>{{ t }}</option>{% endfor %}</select></label>
+    {% set v = args.get('criticality','') %}
+    <label>Class<select name="criticality" class="f-blue {{ 'is-set' if v }}" onchange="this.form.submit()"><option value="">All</option>
+      {% for t in ['A','S','B','C','-'] %}<option {{ 'selected' if v==t }}>{{ t }}</option>{% endfor %}</select></label>
+    <button class="btn">Search</button> <a class="btn light" href="/actions">Reset</a>
+  </div>
+</form>
+
+<div class="result-count"><b>{{ total|num }}</b> actions · Reorder first, then by simulated shortfall probability</div>
+<div class="card panel"><div class="table-wrap" data-server data-offset="{{ (pg - 1) * per }}" style="max-height:none"><table>
+  <tr><th>Action</th><th>Type</th><th>Part</th><th>Class</th><th>Why (rule and values)</th><th>Status</th><th>Owner</th><th>Due</th><th></th></tr>
+  {% for a in items %}
+  <tr class="row-link" onclick="location='/actions/{{ a.action_id }}'">
+    <td class="mono nowrap">{{ a.action_id }}</td>
+    <td><span class="chip nowrap {{ TTONE.get(a.type,'blue') }}" style="padding:2px 10px">{{ a.type }}</span></td>
+    <td><div class="desc">{{ a.description }}</div><span class="mono">{{ a.material }}</span></td>
+    <td>{{ cls(a.criticality) }}</td>
+    <td class="small">{{ a.trigger_rule }}<br><span class="faint">{{ a.trigger_values }}</span></td>
+    <td>{{ status(a.status) }}</td><td class="small">{{ a.owner or '–' }}</td><td class="small">{{ a.due_date or '–' }}</td><td class="go"><i class="fa-solid fa-chevron-right"></i></td>
+  </tr>
+  {% else %}<tr><td colspan="9" class="muted" style="padding:24px">No actions match. Clear a filter, or <a href="/actions">show all</a>.</td></tr>{% endfor %}
+</table></div></div>
+{{ pager(total, pg, per, request.args) }}
+{% endblock %}

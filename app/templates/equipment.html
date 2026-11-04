@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% from "_macros.html" import src, cls, banner, pager %}
+{% block title %}Equipment Explorer · INSpire{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='drawings.js') }}"></script>
+<script>
+const FEAT = {{ featured|tojson }};
+document.querySelectorAll('[data-draw]').forEach(el => {
+  const e = FEAT[+el.dataset.draw];
+  renderDrawing(el, e.drawing, e.hotspots, () => {});
+  el.querySelectorAll('.tw-comp').forEach(g => g.removeAttribute('tabindex'));
+});
+</script>
+{% endblock %}
+{% block content %}
+{{ banner("Equipment twin", "Each machine with its spare parts drawn on it. Red = a part on it needs reordering.",
+          "14,484 functional locations · 1,639 with a drawing", "Digital twin · warehouse to machine") }}
+
+{% if not cat and not args.get('q') and pg == 1 %}
+<div class="feat-head"><h2>Machines that need parts most</h2><span class="faint small">one per drawing type · click to open its twin</span></div>
+<div class="feat">
+  {% for e in featured %}
+  <a class="feat-card" href="/equipment/{{ e.funcloc }}">
+    <div class="feat-draw" data-draw="{{ loop.index0 }}"></div>
+    <div class="feat-body"><b>{{ e.description }}</b><span class="mono">{{ e.funcloc }}</span>
+      <div class="feat-nums"><span class="bad"><b>{{ e.reorder_parts }}</b> to reorder</span><span><b>{{ e.n_parts }}</b> parts</span>
+        {% if e.n_emergency %}<span class="warn"><b>{{ e.n_emergency }}</b> emergency</span>{% endif %}</div></div></a>
+  {% endfor %}
+</div>
+<div class="feat-head"><h2>All equipment</h2></div>
+{% endif %}
+
+<div class="eq-grid">
+  <div class="card panel">
+    <div class="panel-head"><div><div class="title">Equipment categories</div><div class="sub">Red = parts to reorder</div></div>{{ src("equipment_category") }}</div>
+    <div class="cat-list">
+      <a href="/equipment" class="{{ 'on' if not cat }}"><b>All categories</b><small>{{ cats|sum(attribute='locations')|num }} locations</small><span class="n"></span></a>
+      {% for c in cats %}
+      <a href="/equipment?category={{ c.category|urlencode }}" class="{{ 'on' if cat == c.category }}">
+        <b>{{ c.category }}{% if c.drawing %} <i class="fa-solid fa-gears faint" title="Has an equipment drawing"></i>{% endif %}</b>
+        <small>{{ c.locations|num }} locations · {{ c.parts|num }} parts</small>
+        <span class="n">{{ c.reorder_parts|num }}<small>to reorder</small></span></a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div>
+    <form class="card filters" method="get" style="margin-bottom:12px">
+      {% if cat %}<input type="hidden" name="category" value="{{ cat }}">{% endif %}
+      <label style="flex:1">Search locations<input name="q" value="{{ args.get('q','') }}" placeholder="PP-1192, FEED PUMP, HE-…"></label>
+      <button class="btn">Search</button>
+    </form>
+    <div class="result-count"><b>{{ total|num }}</b> locations{% if cat %} in <b>{{ cat }}</b>{% endif %} · most parts to reorder first</div>
+    <div class="card panel"><div class="table-wrap" data-server data-offset="{{ (pg - 1) * per }}" style="max-height:none"><table class="eqt">
+      <tr><th>Functional location</th><th>Category</th><th>Class</th><th class="num">Parts installed</th><th class="num">To reorder</th><th class="num">Emergency</th><th class="num">PM items</th><th>Twin</th></tr>
+      {% for e in items %}
+      <tr class="row-link" onclick="location='/equipment/{{ e.funcloc }}'">
+        <td><div class="desc">{{ e.description }}</div><span class="mono">{{ e.funcloc }}</span></td>
+        <td class="small">{{ e.category }}</td><td>{{ cls(e.criticality) }}</td>
+        <td class="num">{{ e.n_materials }} <span class="faint small">parts</span></td>
+        <td class="num">{% if e.reorder_parts %}<span class="b b-REORDER">{{ e.reorder_parts }} parts</span>{% else %}<span class="faint">0</span>{% endif %}</td>
+        <td class="num">{{ e.n_emergency }}</td><td class="num">{{ e.n_plan_items }}</td>
+        <td>{% if e.drawing %}<span class="b b-MONITOR"><i class="fa-solid fa-gears"></i> 2D</span>{% else %}<span class="faint">–</span>{% endif %}</td>
+      </tr>
+      {% else %}<tr><td colspan="8" class="muted" style="padding:24px">No location matches. Clear the search.</td></tr>{% endfor %}
+    </table></div></div>
+    {{ pager(total, pg, per, request.args) }}
+  </div>
+</div>
+{% endblock %}

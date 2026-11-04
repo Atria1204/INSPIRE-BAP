@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% from "_macros.html" import src, cls, act, status, banner %}
+{% block title %}{{ p.material }} · Material 360 · INSpire{% endblock %}
+{% block crumb %}{{ p.description }} · {{ p.material }}{% endblock %}
+{% block content %}
+{{ banner(p.description, p.material ~ " · " ~ p.unit ~ " · " ~ p.mrp_type,
+          '<span class="b b-cls ' ~ p.criticality ~ '">Class ' ~ p.criticality ~ '</span> <span class="b b-' ~ p.stockout_risk ~ '">Risk ' ~ p.stockout_risk ~ '</span>') }}
+
+{% set low = p.stock <= p.rec_min %}
+{% set d = f.days_to_reorder %}
+{% set sup, con = [], [] %}
+{% if p.months_with_demand %}{% set _ = sup.append('Used in ' ~ p.months_with_demand ~ ' of 17 months') %}{% endif %}
+{% if p.p_stockout and p.p_stockout >= 0.2 %}{% set _ = sup.append((p.p_stockout|pct) ~ ' simulated shortfall probability') %}{% endif %}
+{% if f.min_below_ltd %}{% set _ = sup.append('Min below lead-time demand') %}{% endif %}
+{% if f.abnormal_months %}{% set _ = sup.append('Abnormal use in ' ~ f.abnormal_last_month ~ ': ' ~ (f.abnormal_peak_qty|num) ~ ' vs typical ' ~ (f.abnormal_typical_qty|num)) %}{% endif %}
+{% if p.breakdowns_on_equipment %}{% set _ = sup.append(p.breakdowns_on_equipment ~ ' emergency notifications') %}{% endif %}
+{% if p.n_issues and p.n_issues < 3 %}{% set _ = con.append('Only ' ~ p.n_issues ~ ' issue(s)') %}{% endif %}
+{% if p.price_source == 'fleet median' %}{% set _ = con.append('Price estimated') %}{% endif %}
+{% if p.lead_time_source == 'fleet median' %}{% set _ = con.append('Lead time estimated') %}{% endif %}
+{% if p.mrp_type == 'Non Stock' and p.stock > 0 %}{% set _ = con.append('Non Stock with stock') %}{% endif %}
+{% if not p.n_issues %}{% set _ = con.append('Never issued') %}{% endif %}
+<div class="md">
+<div class="md-main">
+{% macro kd(tone, name, key, value, caption, foot='', bar=None, legend='') -%}
+  <div class="kd {{ tone }}">
+    <div class="kd-top"><span class="kd-name">{{ name }}</span>{% if key %}{{ src(key) }}{% endif %}</div>
+    <div class="kd-body"><span class="kd-value">{{ value }}</span><span class="kd-cap">{{ caption }}</span>
+      {% if bar is not none %}<span class="kd-bar"><i style="width:{{ bar }}%"></i></span>{% endif %}
+      {% if legend %}<span class="kd-leg">{{ legend|safe }}</span>{% endif %}</div>
+    {% if foot %}<div class="kd-foot">{{ foot|safe }}</div>{% endif %}
+  </div>
+{%- endmacro %}
+<section class="kd-rec {{ {'REORDER':'crit','REDUCE':'loss','HOLD':'good','MONITOR':'blue','NO_ACTION_EVIDENCE':'violet'}.get(p.action, 'blue') }}">
+  <div class="kd-top"><span class="kd-name">INSpire recommends</span>
+    <span class="pdx-grade {{ 'strong' if p.grade == 'A' else 'weak' }}" title="Team rule D-24: Grade A = Stock Item with promised lead times, used in 6 or more months">
+      <i class="fa-solid {{ 'fa-circle-check' if p.grade == 'A' else 'fa-circle-half-stroke' }}"></i>
+      {% if p.grade == 'A' %}Grade A evidence{% elif p.grade == 'B' %}Grade B · low confidence{% else %}Thin evidence{% endif %} · {{ p.months_with_demand or 0 }}/17 months · {{ p.lead_lines }} lead times</span>
+    {{ src("minmax_new") }}</div>
+  <div class="kd-rec-body">
+    <div class="kd-rec-main"><span class="kd-rec-act">{{ p.action|alabel }}{% if p.action_qty %} <em>{{ p.action_qty|num }} {{ p.unit }}</em>{% endif %}</span>
+      <span class="kd-cap">A candidate until a planner approves it in the Action Center</span></div>
+    <div class="kd-rec-btns">
+      {% if part_actions %}<a class="btn" href="/actions/{{ part_actions[0].action_id }}"><i class="fa-solid fa-list-check"></i> Decide</a>{% endif %}
+      <a class="btn light" href="/policy?material={{ p.material }}"><i class="fa-solid fa-flask"></i> Test</a>
+      <button type="button" class="btn light" onclick="AI.ask('Why is part {{ p.material }} flagged, and what are the limits of the evidence?')"><i class="fa-solid fa-wand-magic-sparkles"></i> Ask why</button></div>
+  </div>
+  {% set ep = eng.primary %}
+  <div class="eng-strip">
+    <span class="es"><b>Risk</b> {{ ep.risk_level if ep else '–' }}</span>
+    <span class="es"><b>Confidence</b> {{ ep.confidence if ep else '–' }}</span>
+    <span class="es {{ 'warn' if ep and ep.consensus_status == 'scenario_dependent' }}"><b>Scenarios</b> {{ 'all 4 agree' if ep and ep.consensus_status == 'all_scenarios_agree' else 'differ: check A/B, OR/ED' }}</span>
+    <span class="es"><b>Method</b> {{ (ep.method_class if ep else '')|replace('_', ' ') }}</span>
+    <span class="es"><b>Run</b> RUN-277fc4b966e6</span>
+  </div>
+  <p class="kd-why" id="why"><b>Why:</b> {{ p.action_reason }}{% if p.mrp_recommendation != 'Keep' %} <span class="pdx-plan">Planning type: {{ p.mrp_recommendation }}.</span>{% endif %}</p>
+  {% if ep and ep.limitations %}<div class="eng-lim"><b>Limitations</b>{% for l in ep.limitations.split(';') %}<span>{{ l|replace('_', ' ') }}</span>{% endfor %}</div>{% endif %}
+</section>
+{% set top = [p.max_qty or 0, p.rec_max, p.stock, 1]|max %}
+{% set dmin = p.rec_min - (p.min_qty or 0) %}
+{% set rtone = 'crit' if p.stockout_risk == 'HIGH' else ('warn' if p.stockout_risk == 'MEDIUM' else ('good' if p.stockout_risk == 'LOW' else 'neutral')) %}
+<section class="kd-grid two">
+  <div class="kd {{ 'crit' if low else 'blue' }}">
+    <div class="kd-top"><span class="kd-name">Stock vs Min / Max</span>{{ src("stock") }}</div>
+    <div class="kd-body">
+      <span class="kd-value">{{ p.stock|num }} {{ p.unit }}</span>
+      <span class="kd-cap">{% set ref = 'proposed s ' if eng.params else 'recorded Min ' %}{{ ('on hand, at or below the ' ~ ref ~ p.rec_min) if low else ('on hand, above the ' ~ ref ~ p.rec_min) }}</span>
+      <span class="kd-bar"><i style="width:{{ (100 * p.stock / top)|round(1) }}%"></i></span>
+      <dl class="kd-rows">
+        <div><dt>Min / Max today {{ src("minmax_now") }}</dt><dd>{{ 'not set' if (p.mrp_type == 'Non Stock' and not p.max_qty) else ((p.min_qty|num) ~ ' / ' ~ (p.max_qty|num)) }}</dd></div>
+        {% if eng.params %}<div class="new"><dt>Proposed s / S, X2 95% {{ src("engine_rec") }}</dt><dd>{{ p.rec_min }} / {{ p.rec_max }}{% if p.min_qty %} <small>s {{ '+' if dmin > 0 }}{{ dmin|round|int }} vs Min</small>{% endif %}</dd></div>
+        {% else %}<div><dt>Proposed s / S {{ src("engine_grade") }}</dt><dd class="faint" style="font-size:13px">none: not Grade A (D-24)</dd></div>{% endif %}
+      </dl>
+    </div>
+    <div class="kd-foot">{% if p.stock_value_idr %}worth <b>{{ p.stock_value_idr|idr }}</b> · {% endif %}planning type <b>{{ p.mrp_type }}</b></div>
+  </div>
+  <div class="kd {{ rtone }}">
+    <div class="kd-top"><span class="kd-name">Shortfall risk, simulated</span>{{ src("engine_risk") }}</div>
+    <div class="kd-body">
+      <span class="kd-value">{{ p.p_stockout|pct if p.p_stockout is not none else 'Not assessed' }}</span>
+      <span class="kd-cap">{{ 'chance of a shortage in a simulated year under the recorded Min/Max' if p.p_stockout is not none else 'the engine simulates Grade A parts only' }}</span>
+      <span class="kd-bar"><i style="width:{{ (100 * (p.p_stockout or 0))|round(1) }}%"></i></span>
+      <dl class="kd-rows">
+        <div><dt>Forecast</dt><dd>{{ p.forecast_monthly|rate }} <small>{{ (eng.fc.forecast_method or eng.tier.abstain_reason or '')|replace('_', ' ') if eng.fc else '' }}</small></dd></div>
+        {% if eng.mc.X2 %}<div class="new"><dt>With X2, simulated</dt><dd>{{ eng.mc.X2.p|pct }} <small>on hand {{ eng.mc.X2.on_hand|num(1) }} vs {{ eng.mc.R1.on_hand|num(1) if eng.mc.R1 else '–' }} today</small></dd></div>{% endif %}
+        {% if eng.ho.R0 and eng.ho.X2 %}<div><dt>Held-out test, last 6 months</dt><dd>{{ 'shortage' if eng.ho.R0.any_shortfall in (1, '1', 'True') else 'none' }} → <span class="{{ 'g' if eng.ho.X2.any_shortfall not in (1, '1', 'True') }}">{{ 'shortage' if eng.ho.X2.any_shortfall in (1, '1', 'True') else 'none' }}</span></dd></div>{% endif %}
+      </dl>
+    </div>
+    <div class="kd-foot">{% if eng.params %}{% for x in eng.params if x.policy in ('X1','X2','X3') %}{{ x.policy }} <b>{{ x.proposed_s }}/{{ x.S }}</b>{% if not loop.last %} · {% endif %}{% endfor %} at 90/95/98%{% else %}promised lead time <b>{{ p.lead_time_days|num }} d</b> · last taken <b>{{ p.last_issue or 'never' }}</b>{% endif %}</div>
+  </div>
+</section>
+
+<div class="card panel pd-block">
+  <div class="md-head"><h2>Part twin, 3D</h2>
+    <p>Supplier, warehouse rack and equipment. Illustrative replay by the app: press play to watch one simulated year with the recorded or the proposed Min/Max. Official figures are the engine numbers above. {{ src("simulation") }}</p></div>
+  <div class="panel-body"><div id="part3d" class="p3"></div>
+    <div class="flow-links">{% for c in p.eq_cats %}<a class="chip blue" href="/equipment/{{ c.example }}">{% if c.drawing %}<i class="fa-solid fa-gears"></i> {% endif %}{{ c.category }} · {{ c.n }}</a>{% endfor %}
+      <span class="faint small">Schematic, not a map: the data has no supplier location, route or freight.</span></div></div>
+</div>
+
+<div class="card panel">
+  <div class="md-head"><h2>History</h2><p>What happened to this part in the recorded 17 months</p></div>
+  <div class="tabs" role="tablist">
+    {% for id, label in [('demand','Demand'),('equipment','Where installed · ' ~ installed|length),('procurement','Purchases · ' ~ p.purchases|length),('actions','Actions · ' ~ part_actions|length),('issues','Issues')] %}
+    <button type="button" role="tab" data-tab="{{ id }}" class="{{ 'on' if loop.first }}">{{ label }}</button>{% endfor %}
+  </div>
+  <div class="tab-pane on" data-pane="demand"><div class="grid two panel-body">
+    <div><div class="mini-title">Monthly use {{ src("forecast") }}</div>
+      <div class="chart-box"><canvas id="cMonthly" role="img" aria-label="Monthly issues"></canvas></div>
+      <p class="note">{{ p.demand_class }} · ADI {{ p.adi or '–' }} · CV² {{ p.cv2 or '–' }} · {{ p.forecast_method }}
+        {% if f.abnormal_months %}<br><span class="abn"><i class="fa-solid fa-chart-line"></i> Red bar = abnormal month ({{ f.abnormal_months }}) {{ src("abnormal") }}</span>{% endif %}</p></div>
+    <div><div class="mini-title">Reorder point by target {{ src("simulation") }}</div>
+      <div class="chart-box"><canvas id="cRop" role="img" aria-label="Reorder point by service level"></canvas></div>
+      <p class="note">Class {{ p.criticality }} target {{ p.service_level|pct(1) }} {{ src("service_level") }} → reorder point {{ p.reorder_point|num(1) }}</p></div>
+  </div></div>
+  <div class="tab-pane" data-pane="equipment"><div class="table-wrap" style="max-height:420px"><table>
+    <tr><th>Location</th><th>Equipment {{ src("equipment_category") }}</th><th>Class</th><th class="num">Installed qty</th><th class="num">Emergency</th><th></th></tr>
+    {% for l in installed %}<tr class="row-link" onclick="location='/equipment/{{ l.funcloc }}'"><td><div class="desc">{{ l.description }}</div><span class="mono">{{ l.funcloc }}</span></td>
+      <td class="small">{{ l.category }}</td><td>{{ cls(l.criticality) }}</td><td class="num">{{ l.installed_qty|num }} {{ p.unit }}</td><td class="num">{{ l.n_emergency }} <span class="faint small">notifications</span></td>
+      <td>{% if l.drawing %}<span class="b b-MONITOR"><i class="fa-solid fa-gears"></i> twin</span>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="6" class="muted">No BoM assignment.</td></tr>{% endfor %}
+  </table></div></div>
+  <div class="tab-pane" data-pane="procurement"><div class="table-wrap" style="max-height:420px"><table>
+    <tr><th>PR date</th><th class="num">Quantity</th><th class="num">Promised {{ src("lead_time") }}</th><th class="num">vs requested {{ src("late") }}</th><th class="num">Unit price</th><th>Supplier</th></tr>
+    {% for b in p.purchases %}<tr><td class="nowrap">{{ b.pr_date }}</td><td class="num">{{ b.quantity|num }} {{ p.unit }}</td><td class="num">{{ b.lead_time_days|num }} days</td>
+      <td class="num">{% if b.late_days and b.late_days > 0 %}<span class="b b-MEDIUM">+{{ b.late_days|num }} days</span>{% else %}<span class="faint">on time</span>{% endif %}</td>
+      <td class="num">{{ b.unit_price|num }} {{ b.currency }} <span class="faint small">/ {{ p.unit }}</span></td><td class="small">{{ b.supplier_name }}</td></tr>
+    {% else %}<tr><td colspan="6" class="muted">Not purchased in the period.</td></tr>{% endfor %}
+  </table></div></div>
+  <div class="tab-pane" data-pane="actions"><div class="table-wrap" style="max-height:420px"><table>
+    <tr><th>Action</th><th>Type</th><th>Trigger</th><th>Status</th><th>Owner</th></tr>
+    {% for a in part_actions %}<tr class="row-link" onclick="location='/actions/{{ a.action_id }}'"><td class="mono">{{ a.action_id }}</td><td><b>{{ a.type }}</b></td>
+      <td class="small">{{ a.trigger_rule }}</td><td>{{ status(a.status) }}</td><td class="small">{{ a.owner or '–' }}</td></tr>
+    {% else %}<tr><td colspan="5" class="muted">No action proposed.</td></tr>{% endfor %}
+  </table></div></div>
+  <div class="tab-pane" data-pane="issues"><div class="table-wrap" style="max-height:420px"><table>
+    <tr><th>Date</th><th class="num">Quantity taken</th><th>Work order</th></tr>
+    {% for i in p.issues %}<tr><td class="nowrap">{{ i.posting_date }}</td><td class="num">{{ i.quantity|num }} {{ p.unit }}</td><td class="mono">{{ i.order_no }}</td></tr>
+    {% else %}<tr><td colspan="3" class="muted">No issues May 2025 – Sep 2026.</td></tr>{% endfor %}
+  </table></div></div>
+</div>
+</div>
+<aside class="md-side">
+  <section class="md-box">
+    <h2>Part facts</h2>
+    <dl class="md-dl">
+      <div><dt>Class</dt><dd>{{ cls(p.criticality) }} <span class="faint">highest class of the equipment it sits on</span></dd></div>
+      <div><dt>Planning type</dt><dd>{{ p.mrp_type }}{% if p.mrp_recommendation != 'Keep' %} <b class="blue-ink">→ {{ p.mrp_recommendation|replace('Change to ', '') }}</b>{% endif %}</dd></div>
+      <div><dt>Main supplier</dt><dd>{{ p.main_supplier or '–' }}</dd></div>
+      <div><dt>Promised lead time</dt><dd>{{ p.lead_time_days|num }} days{% if p.late_share %} <span class="hl {{ 'warn' if p.late_share >= 0.3 else 'n' }}">late on {{ p.late_share|pct }} of lines</span>{% endif %}</dd></div>
+      <div><dt>Unit price</dt><dd>{{ p.unit_price_idr|idr if p.unit_price_idr else '–' }} <span class="faint">{{ 'PO history' if p.price_source == 'PO history' else 'estimated' }}</span></dd></div>
+      <div><dt>Installed on</dt><dd>{{ p.n_funcloc or 0 }} locations{% if p.breakdowns_on_equipment %} <span class="hl crit">{{ p.breakdowns_on_equipment }} emergency</span>{% endif %}</dd></div>
+      <div><dt>Last taken</dt><dd>{{ p.last_issue or 'never' }} <span class="faint">· {{ p.n_issues or 0 }} issues in 17 months</span></dd></div>
+      {% set x2 = (eng.params|selectattr('policy', 'equalto', 'X2')|first) if eng.params else none %}
+      <div><dt>Service level</dt><dd>{% if x2 %}<b>95%</b> <span class="faint">X2 reference; 90 and 98% are what-ifs</span>{% else %}<span class="faint">no scenario (not Grade A)</span>{% endif %}</dd></div>
+      <div><dt>Safety stock</dt><dd>{{ (x2.safety_stock|float|round(1)) ~ ' ' ~ p.unit if x2 else '–' }}</dd></div>
+      <div><dt>Order quantity Q</dt><dd>{{ (x2.proposed_Q ~ ' ' ~ p.unit) if x2 else '–' }} {% if x2 %}<span class="faint">median PR quantity</span>{% endif %}</dd></div>
+      <div><dt>Evidence tier</dt><dd>{{ eng.tier.tier if eng.tier else '–' }} · grade {{ (eng.tier.policy_grade or '–') if eng.tier else '–' }} · {{ eng.tier.demand_class if eng.tier else '' }}</dd></div>
+    </dl>
+  </section>
+  <section class="md-box">
+    <h2>Evidence <span class="md-cnt"><b class="s">{{ sup|length }} for</b><b class="c">{{ con|length }} against</b></span></h2>
+    <ul class="md-ev">
+      {% for x in sup %}<li class="sup"><i class="fa-solid fa-check"></i>{{ x }}</li>{% endfor %}
+      {% for x in con %}<li class="con"><i class="fa-solid fa-xmark"></i>{{ x }}</li>{% endfor %}
+      {% if not sup and not con %}<li class="mis"><i class="fa-solid fa-minus"></i>No strong signal either way</li>{% endif %}
+    </ul>
+    <p class="md-mis"><b>Not in the data:</b> receipt dates (DEF-06), stock date (DEF-12), parts per PM job.</p>
+    {% if p.mrp_reason %}<p class="md-mis">{{ p.mrp_reason }}</p>{% endif %}
+  </section>
+</aside>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => { const w = document.getElementById('why'); if (!w) return;
+  const walk = n => n.nodeType === 3 ? n.replaceWith(...(() => { const f = document.createElement('span');
+    f.innerHTML = n.textContent.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])).replace(/(\d+(?:[.,]\d+)*%?)/g, '<b class="num-hl">$1</b>'); return [...f.childNodes]; })())
+    : [...n.childNodes].forEach(walk);
+  [...w.childNodes].slice(1).forEach(walk); })();
+</script>
+<script src="{{ url_for('static', filename='part3d.js') }}"></script>
+<script>
+renderPart3D(document.getElementById('part3d'), {
+  material: {{ p.material|tojson }}, unit: {{ p.unit|tojson }}, supplier: {{ (p.main_supplier or '')[:28]|tojson }},
+  stock: {{ p.stock }}, min_now: {{ (p.min_qty or 0)|round|int }}, max_now: {{ (p.max_qty or 0)|round|int }}, rec_min: {{ p.rec_min }}, rec_max: {{ p.rec_max }},
+  machine: {{ (p.eq_cats[0].category if p.eq_cats else 'Equipment')|tojson }}, locations: {{ p.n_funcloc or 0 }}, emergency: {{ p.breakdowns_on_equipment or 0 }},
+});
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.tab-pane').forEach(x => x.classList.toggle('on', x.dataset.pane === b.dataset.tab));
+});
+const monthly = {{ p.monthly|tojson }};
+const fc = {{ p.forecast_monthly }};
+// same rule as the pipeline: above 3 x median non-zero month and above mean + 3 sd
+const abn = (() => {
+  if (!{{ 1 if f.abnormal_months else 0 }}) return () => false;
+  const q = monthly.map(m => m.quantity).filter(v => v > 0).sort((a, b) => a - b);
+  const med = q.length % 2 ? q[(q.length - 1) / 2] : (q[q.length / 2 - 1] + q[q.length / 2]) / 2;
+  const mean = q.reduce((s, v) => s + v, 0) / q.length, sd = Math.sqrt(q.reduce((s, v) => s + (v - mean) ** 2, 0) / q.length);
+  const cut = Math.max(3 * med, mean + 3 * sd);
+  return v => v > cut;
+})();
+new Chart(document.getElementById('cMonthly'), {
+  data: { labels: monthly.map(m => monShort(m.month)), datasets: [
+    { type: 'bar', label: 'Issued ({{ p.unit }})', data: monthly.map(m => m.quantity), backgroundColor: monthly.map(m => abn(m.quantity) ? '#d03b3b' : '#5b7fb8'), borderRadius: 4, borderSkipped: 'bottom' },
+    { type: 'line', label: 'Forecast', data: monthly.map(() => fc), borderColor: '#149a6b', borderDash: [6, 4], pointRadius: 0, borderWidth: 2 } ] },
+  options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { x: { grid: { display: false } }, y: { beginAtZero: true, grid: { color: '#e6ebf2' } } } } });
+const rop = {{ p.rop_levels|tojson }};
+if (rop.length) new Chart(document.getElementById('cRop'), {
+  type: 'line', data: { labels: rop.map(r => (r.service_level*100).toFixed(1) + '%'), datasets: [
+    { label: 'Reorder point needed', data: rop.map(r => r.reorder_point), borderColor: '#0f1f3d', backgroundColor: '#0f1f3d', tension: .25 },
+    { label: 'Stock now', data: rop.map(() => {{ p.stock }}), borderColor: '#c93434', borderDash: [5, 4], pointRadius: 0 } ] },
+  options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true, grid: { color: '#e6ebf2' } } } } });
+else document.getElementById('cRop').parentElement.innerHTML = '<p class="muted" style="padding:20px">Never issued: nothing to simulate.</p>';
+</script>
+{% endblock %}

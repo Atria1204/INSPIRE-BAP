@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% from "_macros.html" import src, cls, act, banner, pager %}
+{% block title %}Inventory Intelligence · INSpire{% endblock %}
+{% set TONE = {
+  'action': {'REORDER':'crit','REDUCE':'loss','NO_ACTION_EVIDENCE':'violet','MONITOR':'blue','HOLD':'teal'},
+  'stockout_risk': {'HIGH':'crit','MEDIUM':'amber','LOW':'teal'},
+  'health': {'below reorder point':'crit','dead stock':'violet','non-moving':'violet','slow-moving':'loss','excess':'loss','healthy':'teal'},
+} %}
+{% set FLAGS = {'critical_empty':('Critical parts at zero stock (used)','crit'), 'below_min':('Issued Stock Items below Min','amber'),
+                'min_below_ltd':('Min below lead-time demand','crit'), 'nonstock_issued':('Non Stock parts that were used','blue'),
+                'idle_stock_item':('Idle Stock Items','loss'), 'abnormal':('Abnormal consumption','violet'),
+                'reorder_soon':('Reorder within 30 days','amber'), 'grade_a':('Grade A evidence (228)','teal'), 'eng_reorder':('Engine: Reorder','crit'),
+                'excess_any':('Stock above the new Max','loss')} %}
+{% set LABEL = {'action':'Action','stockout_risk':'Stockout risk','health':'Stock health','criticality':'Class','demand_class':'Demand pattern',
+                'mrp_recommendation':'Planning type','mrp_type':'MRP type','category':'Equipment','q':'Search'} %}
+{% block content %}
+<div id="partsApp">
+<header class="page-banner parts-banner">
+  <div><h1 class="page-banner-title">Parts</h1><p class="page-banner-meta"><b>{{ total|num }}</b> of 7,481 parts · pick a quick view or click a column title to sort and filter</p></div>
+  <form class="bn-search" id="searchForm" method="get" role="search">
+    {% for k, v in request.args.items() if k not in ('q', 'page') %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+    <label><i class="fa-solid fa-magnifying-glass"></i><input name="q" value="{{ args.get('q','') }}" placeholder="Part name or number" aria-label="Search parts"></label>
+    <button class="btn light">Search</button>
+  </form>
+</header>
+
+<form class="card" method="get" id="filterForm">
+  <div class="quick"><span class="lbl">Quick views <small>one click filters the table</small></span>
+    {% for key, label, icon, srt in [('eng_reorder','Reorder candidates','fa-cart-shopping','risk'),('critical_empty','Critical at zero stock','fa-circle-exclamation','risk'),
+                                ('excess_any','Above recorded Max','fa-layer-group','excess'),('abnormal','Abnormal consumption','fa-chart-line','risk'),
+                                ('grade_a','Grade A evidence','fa-circle-check','risk')] %}
+    <a class="qv {{ FLAGS[key][1] }} {{ 'on' if args.get(key) }}" href="/parts?{{ key }}=1&sort={{ srt }}"><i class="fa-solid {{ icon }}"></i> {{ label }} <b class="qv-n">{{ qcounts[key]|num }}</b></a>{% endfor %}
+    {% set has = request.args|reject('in', ['page','per'])|list %}{% if has %}<a class="tbl-reset" href="/parts{% if per != 20 %}?per={{ per }}{% endif %}"><i class="fa-solid fa-rotate-left"></i> Reset table</a>{% endif %}
+  </div>
+  {% set base = request.args.to_dict() %}
+  {% set active = [] %}
+  {% for key, val in base.items() if key not in ('page','sort','dir') and val %}{% set _ = active.append(key) %}{% endfor %}
+  {% if active %}
+  <div class="chips"><span class="lbl">Showing</span>
+    {% for key in active %}
+    {% set d = dict(base) %}{% set _ = d.pop(key) %}{% set _ = d.pop('page', None) %}
+    {% if key in FLAGS %}
+      <span class="chip {{ FLAGS[key][1] }}">{{ FLAGS[key][0] }} <a href="?{{ d|urlencode }}" aria-label="Remove filter">×</a></span>
+    {% else %}
+      <span class="chip {{ TONE.get(key, {}).get(base[key], 'blue') }}">{{ LABEL.get(key, key) }}: {{ base[key]|hlabel }} <a href="?{{ d|urlencode }}" aria-label="Remove filter">×</a></span>
+    {% endif %}
+    {% endfor %}
+    <a class="small" href="/parts">Clear all</a>
+  </div>
+  {% endif %}
+</form>
+
+
+<div class="card panel">
+  <div class="table-wrap" data-server data-offset="{{ (pg - 1) * per }}" style="max-height:none"><table class="pt">
+    <colgroup><col style="width:3.2%"><col style="width:16.8%"><col style="width:5%"><col style="width:6.5%"><col style="width:8.5%"><col style="width:11%"><col style="width:8.5%">
+      <col style="width:9.5%"><col style="width:9.5%"><col style="width:8%"><col style="width:7.5%"><col style="width:8%"></colgroup>
+    {% macro hcol(label, skey=None, fname=None, values=[], hl=False, num=False, lo='Smallest first', hi='Largest first') -%}
+      {% set cur_s = args.get('sort') or 'risk' %}{% set cur_d = args.get('dir') or ('asc' if cur_s in ('material','class') else 'desc') %}
+      {% set fv = args.get(fname, '') if fname else '' %}
+      <div class="hm {{ 'num' if num }}"><button type="button" class="hm-btn {{ 'sorted' if skey and cur_s == skey }} {{ 'filtered' if fv }}" aria-haspopup="true">{{ label }}
+        {% if skey and cur_s == skey %}<i class="fa-solid {{ 'fa-arrow-up-short-wide' if cur_d == 'asc' else 'fa-arrow-down-wide-short' }}"></i>{% endif %}
+        {% if fv %}<i class="fa-solid fa-filter"></i>{% endif %}<i class="fa-solid fa-caret-down hm-caret"></i></button>
+        <div class="hm-pop" hidden>
+          {% if (skey and cur_s == skey and args.get('sort')) or fv %}{% set d0 = dict(base) %}{% set _ = d0.pop('page', None) %}{% if skey and cur_s == skey %}{% set _ = d0.pop('sort', None) %}{% set _ = d0.pop('dir', None) %}{% endif %}{% if fname %}{% set _ = d0.pop(fname, None) %}{% endif %}
+          <a class="hm-item hm-reset" href="?{{ d0|urlencode }}"><i class="fa-solid fa-rotate-left"></i> Reset this column</a><hr>{% endif %}
+          {% if skey %}{% set d = dict(base) %}{% set _ = d.pop('page', None) %}
+          {% set _ = d.update({'sort': skey, 'dir': 'asc'}) %}<a class="hm-item {{ 'on' if cur_s == skey and cur_d == 'asc' }}" href="?{{ d|urlencode }}"><i class="fa-solid fa-arrow-up-short-wide"></i> {{ lo }}</a>
+          {% set _ = d.update({'sort': skey, 'dir': 'desc'}) %}<a class="hm-item {{ 'on' if cur_s == skey and cur_d == 'desc' }}" href="?{{ d|urlencode }}"><i class="fa-solid fa-arrow-down-wide-short"></i> {{ hi }}</a>{% endif %}
+          {% if fname %}{% if skey %}<hr>{% endif %}<span class="hm-cap">Show only</span>
+          {% set d = dict(base) %}{% set _ = d.pop('page', None) %}{% set _ = d.pop(fname, None) %}
+          <a class="hm-item {{ 'on' if not fv }}" href="?{{ d|urlencode }}">All</a>
+          {% for o in values %}{% set _ = d.update({fname: o}) %}<a class="hm-item {{ 'on' if fv == o }}" href="?{{ d|urlencode }}">{{ o|hlabel if hl else (o|alabel if fname == 'action' else o) }}</a>{% endfor %}{% endif %}
+        </div></div>{%- endmacro %}
+    <tr><th>{{ hcol('Part', 'material', 'category', cats, lo='A → Z', hi='Z → A') }}</th>
+        <th>{{ hcol('Class', 'class', 'criticality', ['A','S','B','C'], lo='A first', hi='C first') }}</th>
+        <th class="num">{{ hcol('Stock', 'stock', num=True) }}</th>
+        <th class="num">{{ hcol('Value', 'value', num=True, lo='Lowest first', hi='Highest first') }}</th>
+        <th class="num">Min / Max</th>
+        <th class="num">{{ hcol('Use / month', 'forecast', 'demand_class', opts['demand_class'], num=True) }}</th>
+        <th class="num">{{ hcol('Last taken', 'last', 'health', opts['health'], True, num=True, lo='Oldest first', hi='Newest first') }}</th>
+        <th>Order</th>
+        <th class="num">{{ hcol('Above Max', 'excess', num=True) }}</th>
+        <th class="num">{{ hcol('Run-out', 'risk', 'stockout_risk', ['HIGH','MEDIUM','LOW'], num=True, lo='Lowest first', hi='Highest first') }}</th>
+        <th>{{ hcol('Action', None, 'action', opts['action']) }}</th></tr>
+    {% for r in items %}
+    <tr class="row-link" onclick="location='/parts/{{ r.material }}'">
+      <td><div class="desc" title="{{ r.description }}">{{ r.description }}</div><div class="pt-sub"><span class="mono">{{ r.material }}</span> · {{ r.mrp_type }}{% if r.mrp_recommendation != 'Keep' %} <span class="pt-chg" title="{{ r.mrp_recommendation }}">→ {{ r.mrp_recommendation|replace('Change to ', '') }}</span>{% endif %}</div></td>
+      <td>{{ cls(r.criticality) }}</td>
+      <td class="num"><b>{{ r.stock|num }}</b> <span class="faint small">{{ r.unit }}</span></td>
+      <td class="num">{% if r.stock_value_idr %}{{ r.stock_value_idr|idr }}{% else %}<span class="faint">–</span>{% endif %}</td>
+      <td class="num mm"><div class="muted small">today {% if r.mrp_type == 'Non Stock' and not r.max_qty %}not set{% else %}{{ r.min_qty|num }} / {{ r.max_qty|num }}{% endif %}</div>
+        <div>{% if r.has_prop %}X2 <b>{{ r.rec_min }} / {{ r.rec_max }}</b>{% else %}<span class="faint small">no proposal</span>{% endif %}</div></td>
+      <td class="num">{{ r.forecast_monthly|rate }}<div class="faint small">{{ r.demand_class if r.demand_class != 'no demand' else 'no recorded consumption' }}</div></td>
+      <td class="num">{% if r.last_issue %}{{ r.last_issue }}<div class="faint small">{{ r.last_qty|num }} {{ r.unit }} taken</div>{% else %}<span class="faint">–</span>{% endif %}</td>
+      <td class="mono small wo">{{ r.last_order or '–' }}</td>
+      <td class="num">{% if r.excess_qty %}<b class="loss-ink">{{ r.excess_qty|num }} {{ r.unit }}</b><div class="faint small">above recorded Max</div>{% else %}<span class="faint">–</span>{% endif %}</td>
+      <td class="num">{% if r.p_stockout %}<span class="b b-{{ r.stockout_risk }}">{{ r.p_stockout|pct }}</span>{% else %}<span class="faint">–</span>{% endif %}</td>
+      <td title="{{ r.health|hlabel }}">{{ act(r.action, r.action_qty) }}</td>
+    </tr>
+    {% else %}<tr><td colspan="11" class="muted" style="padding:24px">No parts match these filters. Remove a filter above, or <a href="/parts">clear all</a>.</td></tr>{% endfor %}
+  </table></div>
+</div>
+{{ pager(total, pg, per, request.args) }}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {   // filter, sort and page without reloading the whole page: fetch the same URL and swap the results
+  const app = document.getElementById('partsApp');
+  async function go(url, push = true) {
+    app.classList.add('is-loading');
+    try {
+      const html = await (await fetch(url, { headers: { 'X-Partial': '1' } })).text();
+      const next = new DOMParser().parseFromString(html, 'text/html').getElementById('partsApp');
+      if (!next) { location.href = url; return; }
+      app.innerHTML = next.innerHTML; window.numberTables && numberTables(app); window.enhanceSelects && enhanceSelects(app);
+      if (push) history.pushState({}, '', url);
+    } catch (e) { location.href = url; }
+    finally { app.classList.remove('is-loading'); }
+  }
+  const formUrl = f => { const p = new URLSearchParams(new FormData(f)); [...p.keys()].forEach(k => { if (!p.get(k)) p.delete(k); }); return '/parts?' + p; };
+  app.addEventListener('change', e => {
+    if (e.target.matches('select.pg-sel')) { e.stopPropagation(); const u = new URL(location.href); u.searchParams.set('per', e.target.value); u.searchParams.set('page', 1); go(u.pathname + u.search); }
+  });
+  app.addEventListener('submit', e => { if (e.target.id === 'filterForm' || e.target.id === 'searchForm') { e.preventDefault(); go(formUrl(e.target)); } });
+  app.addEventListener('click', e => {
+    const btn = e.target.closest('.hm-btn');
+    if (btn) { const pop = btn.nextElementSibling, open = pop.hidden;
+      app.querySelectorAll('.hm-pop').forEach(x => x.hidden = true); pop.hidden = !open; e.stopPropagation(); return; }
+    const a = e.target.closest('a.qv, a.hm-item, .chips a, .pg a');
+    if (a && !e.ctrlKey && !e.metaKey) { e.preventDefault(); go(a.href); }
+  });
+  addEventListener('popstate', () => go(location.href, false));
+  document.addEventListener('click', e => { if (!e.target.closest('.hm')) app.querySelectorAll('.hm-pop').forEach(x => x.hidden = true); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') app.querySelectorAll('.hm-pop').forEach(x => x.hidden = true); });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% from "_macros.html" import src, cls, act, banner %}
+{% block title %}{{ e.funcloc }} · Equipment Explorer · INSpire{% endblock %}
+{% block crumb %}{{ e.funcloc }} · {{ e.description }}{% endblock %}
+{% block content %}
+{{ banner(e.description, e.funcloc ~ " · " ~ e.category ~ (" · " ~ e.title if e.title else ""),
+          '<span class="b b-cls ' ~ e.criticality ~ '">Class ' ~ e.criticality ~ '</span> <span class="b b-gray">' ~ e.n_materials ~ ' parts installed</span>') }}
+
+<div class="loc-grid grid-pack">
+  <div class="card panel">
+    <div class="panel-head"><div><div class="title"><i class="fa-solid fa-gears" style="color:#2a6fd0"></i> Equipment twin</div>
+      <div class="sub">{% if e.drawing %}Click a component · <b style="color:#a82828">red</b> = part to reorder{% else %}No drawing for this category{% endif %}</div></div>
+      {{ src("component") }}</div>
+    {% if e.drawing %}
+    <div class="panel-body">
+      <div class="drawing-wrap" id="drawing"></div>
+      <div class="legend" style="margin-top:10px"><span><i style="background:#fcecec;border:1px solid #c93434"></i>has a part to reorder</span>
+        <span><i style="background:#ebf2fc;border:1px solid #2a6fd0"></i>has installed parts</span><span><i style="background:#edf1f6;border:1px solid #8494aa"></i>no part placed</span>
+</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="card panel">
+    <div class="panel-head"><div><div class="title">Location facts</div></div></div>
+    <div class="panel-body">
+      <div class="facts" style="grid-template-columns:1fr 1fr">
+        <div><span>Parts installed</span><b>{{ e.n_materials }}</b><small>{{ e.parts|selectattr('action','equalto','REORDER')|list|length }} to reorder</small></div>
+        <div><span>Emergency notifications {{ src("breakdowns") }}</span><b>{{ e.n_emergency }}</b><small>of {{ e.n_notifications }} notifications</small></div>
+        <div><span>PM plan items</span><b>{{ e.n_plan_items }}</b><small>maintenance plan</small></div>
+        <div><span>Class</span><b>{{ e.criticality }}</b><small>FuncLoc criticality</small></div>
+      </div>
+      {% if e.related %}<p class="small" style="margin:14px 0 4px"><b>Same equipment family</b></p>
+      {% for r in e.related %}<div class="small"><a href="/equipment/{{ r.funcloc }}">{{ r.funcloc }}</a> · {{ r.description }} <span class="faint">({{ r.category }})</span></div>{% endfor %}{% endif %}
+      <button type="button" class="btn violet" style="margin-top:14px" onclick="AI.ask('Which parts installed on {{ e.funcloc }} are at risk, and what should we do?')"><i class="fa-solid fa-wand-magic-sparkles"></i> Ask Copilot about this equipment</button>
+    </div>
+  </div>
+</div>
+
+<div class="sec-title"><h2 id="partsTitle">Parts installed on this equipment</h2><p id="partsFilter">All components</p></div>
+<div class="card panel"><div class="table-wrap" style="max-height:520px"><table id="partsTable">
+  <tr><th>Part</th><th>Component {{ src("component") }}</th><th class="num">Installed</th><th class="num">Stock</th><th class="num">Min / Max now</th><th class="num">Proposed X2</th><th class="num">Shortfall</th><th>Action</th></tr>
+  {% for p in e.parts %}
+  <tr class="row-link" data-hotspot="{{ p.hotspot }}" onclick="location='/parts/{{ p.material }}'">
+    <td><div class="desc">{{ p.description }}</div><span class="mono">{{ p.material }}</span></td>
+    <td class="small">{{ p.component if p.component != 'other' else 'other' }}</td>
+    <td class="num">{{ p.installed_qty|num }} {{ p.unit }}</td><td class="num"><b>{{ p.stock|num }}</b> {{ p.unit }}</td>
+    <td class="num">{% if p.mrp_type == 'Non Stock' and not p.max_qty %}<span class="faint">not set</span>{% else %}{{ p.min_qty|num }} / {{ p.max_qty|num }} <span class="faint small">{{ p.unit }}</span>{% endif %}</td>
+    <td class="num">{% if p.has_prop %}<b class="good-ink">{{ p.rec_min }} / {{ p.rec_max }}</b> <span class="faint small">{{ p.unit }}</span>{% else %}<span class="faint small">no proposal</span>{% endif %}</td>
+    <td class="num">{% if p.p_stockout %}<span class="b b-{{ p.stockout_risk }}">{{ p.p_stockout|pct }}</span>{% else %}<span class="faint">–</span>{% endif %}</td>
+    <td>{{ act(p.action) }}</td>
+  </tr>
+  {% else %}<tr><td colspan="8" class="muted">No BoM assignment for this location.</td></tr>{% endfor %}
+</table></div></div>
+
+<div class="grid two" style="margin-top:16px">
+  <div class="card panel"><div class="panel-head"><div><div class="title">Notifications</div><div class="sub">Latest 25 on this location</div></div>{{ src("breakdowns") }}</div>
+    <div class="table-wrap" style="max-height:340px"><table><tr><th>Date</th><th>Type</th><th>Priority</th><th>Description</th><th>Status</th></tr>
+    {% for n in e.notifications %}<tr><td class="small nowrap">{{ n.notif_date }}</td><td class="mono">{{ n.notif_type }}</td>
+      <td>{% if n.priority == 'Emergency' %}<span class="b b-HIGH">Emergency</span>{% else %}<span class="small">{{ n.priority }}</span>{% endif %}</td>
+      <td class="small">{{ n.description }}</td><td class="small">{{ n.status }}</td></tr>
+    {% else %}<tr><td colspan="5" class="muted">No notifications on this location.</td></tr>{% endfor %}</table></div></div>
+  <div class="card panel"><div class="panel-head"><div><div class="title">Maintenance plan</div><div class="sub">Plans do not list the parts they consume</div></div></div>
+    <div class="table-wrap" style="max-height:340px"><table><tr><th>Item</th><th>Cycle</th><th>Start of cycle</th></tr>
+    {% for m in e.plan_items %}<tr><td class="small">{{ m.item_text }}</td><td class="small">{{ m.cycle }}</td><td class="small">{{ m.cycle_start }}</td></tr>
+    {% else %}<tr><td colspan="3" class="muted">No plan items on this location.</td></tr>{% endfor %}</table></div></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='drawings.js') }}"></script>
+<script>
+const HS = {{ e.hotspots|tojson }};
+const NAMES = {};
+const el = document.getElementById('drawing');
+if (el) renderDrawing(el, {{ e.drawing|tojson }}, HS, comp => {
+  const rows = document.querySelectorAll('#partsTable tr[data-hotspot]');
+  rows.forEach(r => r.style.display = !comp || r.dataset.hotspot === comp ? '' : 'none');
+  const label = comp ? (el.querySelector(`[data-comp="${comp}"]`)?.getAttribute('aria-label') || comp) : null;
+  const n = comp ? [...rows].filter(r => r.dataset.hotspot === comp).length : rows.length;
+  document.getElementById('partsFilter').innerHTML = comp ? `Component: <b>${esc(label)}</b> · ${n} part(s) · <a href="#" onclick="document.querySelector('.tw-comp.hs-on')?.dispatchEvent(new Event('click'));return false">show all</a>` : 'All components';
+});
+</script>
+{% endblock %}

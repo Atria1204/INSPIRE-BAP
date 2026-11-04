@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% from "_macros.html" import src, banner, simlabel %}
+{% block title %}Policy Lab · INSpire{% endblock %}
+{% block content %}
+{{ banner("Policy Lab", "Test one part: engine result first, then replay it yourself with a custom Min/Max or a longer lead time.",
+          '<a class="btn light" href="/policy/warehouse"><i class="fa-solid fa-warehouse"></i> Whole-warehouse scenarios</a>') }}
+
+<form class="card pl-form" onsubmit="event.preventDefault(); runTwin()">
+  <div class="pl-how"><b>How to use:</b> 1 pick a part · 2 optionally change one thing (lead time, your own Min/Max, an expedite) · 3 press <b>Run</b>.
+    The engine result appears first, then the app replays the year with the same random demand for every setting.</div>
+  <div class="pl-steps">
+    <section class="pl-step"><span class="pl-n">1</span><div class="pl-body"><h3>Pick a part</h3>
+      <label class="pl-wide">Part<select id="mat">
+        {% if p %}<option value="{{ p.material }}" selected>{{ p.material }} · {{ p.description }}</option>{% endif %}
+        {% for x in picks if not p or x.material != p.material %}<option value="{{ x.material }}">{{ x.material }} · {{ x.description }} ({{ x.action|alabel }})</option>{% endfor %}
+      </select></label>
+      {% if p %}<span class="ev-grade {{ 'strong' if grade == 'A' else 'weak' }}"><i class="fa-solid {{ 'fa-circle-check' if grade == 'A' else 'fa-circle-half-stroke' }}"></i>
+        {% if grade == 'A' %}Grade A evidence · the engine proposes parameters{% elif grade == 'B' %}Grade B · no engine proposal, replay only{% else %}Outside the simulation population · replay only{% endif %}</span>{% endif %}</div></section>
+    <section class="pl-step"><span class="pl-n">2</span><div class="pl-body"><h3>What if <small>optional</small></h3>
+      <div class="pl-row">
+        <label>Promised lead time<select id="ltm"><option value="1">as promised</option><option value="1.25">25% longer</option><option value="1.5">50% longer</option></select></label>
+        <label>Your Min ({{ p.unit if p else 'unit' }})<input id="cmin" type="number" min="0" step="1" placeholder="e.g. 20"></label>
+        <label>Your Max ({{ p.unit if p else 'unit' }})<input id="cmax" type="number" min="0" step="1" placeholder="e.g. 40"></label>
+        <label>Expedite delivery (days)<input id="expd" type="number" min="1" step="1" placeholder="e.g. 10"></label>
+        <input id="expp" type="hidden" value="0">
+      </div>
+      <p class="pl-note">Cost of expediting is blocked: no approved cost set (D-09, D-10). Results are in units.</p></div></section>
+    <section class="pl-step"><span class="pl-n">3</span><div class="pl-body"><h3>Run</h3>
+      <div class="pl-row"><label>Simulated years<select id="reps"><option>100</option><option selected>200</option><option>300</option></select></label>
+        <button class="btn pl-run"><i class="fa-solid fa-play"></i> Run</button></div>
+      <div class="pl-status small muted" id="status">{{ src("simulation") }}</div></div></section>
+  </div>
+</form>
+{{ simlabel() }}
+
+<div id="out" style="display:none">
+  {% if eng and eng.mc %}<section class="card panel eng-ho">
+    <div class="md-head"><h2>Engine result for this part</h2><p>Team engine run RUN-277fc4b966e6, 1,000 resampled years, demand A, view ED. The app's own replay follows below.</p></div>
+    <div class="eng-ho-grid">{% for pol, lab in [('R1','Recorded Min/Max'),('N1','Naive mean'),('X1','X1 90%'),('X2','X2 95%'),('X3','X3 98%')] %}{% set r = eng.mc.get(pol) %}{% if r %}
+      <div class="{{ 'base' if pol == 'R1' else ('best' if pol == 'X2' else '') }}"><span>{{ lab }} · {{ r.s_used|float|int }}/{{ (r.S|float|int) if r.S else '–' }}</span><b>{{ r.p|pct }}</b><small class="faint">shortfall chance · on hand {{ r.on_hand|num(1) }} {{ p.unit }}</small></div>{% endif %}{% endfor %}</div>
+  </section>{% elif p %}<p class="note" style="margin-top:14px">The engine simulates Grade A parts only. This part has no engine result; the app replay below is illustrative.</p>{% endif %}
+  <div class="kd-grid two" id="cards" style="margin-top:16px"></div>
+  <div class="card panel" style="margin-top:16px">
+    <div class="panel-head"><div><div class="title">Stock day by day</div><div class="sub">Below zero = a job waiting · run 1 of <span id="nrep"></span></div></div>{{ src("simulation") }}</div>
+    <div class="panel-body"><div class="chart-box tall"><canvas id="cPath" role="img" aria-label="Stock over one year"></canvas></div>
+</div>
+  </div>
+  <div class="card panel" style="margin-top:16px">
+    <div class="panel-head"><div><div class="title">Results over all runs</div><div class="sub">Mean, with the 95% confidence interval in brackets</div></div><span class="kind Scenario">Scenario</span></div>
+    <div class="table-wrap"><table id="res"></table></div>
+  </div>
+</div>
+
+<details class="card panel how" style="margin-top:16px">
+  <summary class="panel-head"><div><div class="title">How the twin works</div><div class="sub">Banks &amp; Carson; Law · click to open</div></div></summary>
+  <div class="panel-body"><div class="steps">
+    <div><b>Arrivals</b>An open order arrives when its promised interval has passed and first serves jobs that are waiting.</div>
+    <div><b>Demand</b>Issues per day follow the part's own rate; each issue size is drawn from its own history.</div>
+    <div><b>Review</b>If on hand + on order − waiting ≤ Min, order up to Max. The interval is drawn from its own PR PO lines.</div>
+    <div><b>Fair comparison</b>All policies see the same random days in each run (common random numbers).</div>
+    <div><b>Output analysis</b>Repeat 100–300 years; report the mean with a 95% confidence interval.</div>
+  </div>
+  <p class="note">Capability 6 (cost-risk) is blocked until a cost set is approved (D-09, D-10). Units only.</p></div>
+</details>
+{% endblock %}
+{% block scripts %}
+<script>
+let chart;
+const COLORS = { current: '#c93434', recommended: '#149a6b', custom: '#2a6fd0', expedite: '#4a3aa7' };
+const NAMES = { current: 'Recorded', recommended: 'Proposed X2', custom: 'Custom', expedite: 'Proposed X2 + expedite' };
+const TONES = { current: 'crit', recommended: 'teal', custom: '', expedite: 'violet' };
+const KD = { crit: 'crit', teal: 'good', violet: 'violet' };
+const ci = (o, f) => `${f(o.mean)} <span class="small faint">(${f(o.low)} – ${f(o.high)})</span>`;
+async function runTwin() {
+  const m = document.getElementById('mat').value, s = document.getElementById('status');
+  s.innerHTML = '<span class="spin"></span> simulating…';
+  const qs = new URLSearchParams({ reps: document.getElementById('reps').value, lt_mult: document.getElementById('ltm').value });
+  const cmin = document.getElementById('cmin').value, cmax = document.getElementById('cmax').value;
+  if (cmin !== '' && cmax !== '') { qs.set('min', cmin); qs.set('max', cmax); }
+  const ed = document.getElementById('expd').value, ep = document.getElementById('expp').value;
+  if (ed) { qs.set('exp_days', ed); qs.set('exp_premium', ep || 0); }
+  const r = await (await fetch(`/api/twin/${m}?${qs}`)).json();
+  s.innerHTML = `${esc(r.description)} · ${r.reps} runs × ${r.days} days · lead time × ${r.lt_mult}` + (r.expedite_days ? ` · expedite ${r.expedite_days} d, +${fmtIDR(r.expedite_premium)}/order` : '');
+  history.replaceState(null, '', '/policy?material=' + m);
+  document.getElementById('out').style.display = '';
+  document.getElementById('nrep').textContent = r.reps;
+  const P = r.policies, cur = P.current, rec = P.recommended, keys = Object.keys(P);
+  document.getElementById('cards').innerHTML = keys.map(k => `
+    <div class="kd ${KD[TONES[k]] || 'blue'}">
+      <div class="kd-top"><span class="kd-name">${NAMES[k]} · Min ${P[k].min} / Max ${P[k].max}</span><span class="kind Scenario">Scenario</span></div>
+      <div class="kd-body"><span class="kd-value">${pct(P[k].fill_rate.mean)}</span><span class="kd-cap">demand served from stock, app replay</span></div>
+      <div class="kd-foot"><b>${P[k].short_events.mean.toFixed(1)}</b> shortages a year · <b>${P[k].orders.mean.toFixed(1)}</b> orders · on hand <b>${P[k].avg_on_hand.mean.toFixed(1)}</b></div>
+    </div>`).join('');
+  const rowsDef = [['Demand served from stock (fill rate)', o => ci(o.fill_rate, x => pct(x, 1))], ['Shortage events per year', o => ci(o.short_events, x => x.toFixed(1))],
+    ['Runs with at least one shortage', o => pct(o.runs_with_shortage)], ['Orders per year', o => ci(o.orders, x => x.toFixed(1))],
+    ['Average stock on hand', o => ci(o.avg_on_hand, x => x.toFixed(1))]];
+  document.getElementById('res').innerHTML = `<tr><th>Measure</th>${keys.map(k => `<th class="num">${NAMES[k]} (${P[k].min}/${P[k].max})</th>`).join('')}</tr>` +
+    rowsDef.map(([l, f]) => `<tr><td>${l}</td>${keys.map(k => `<td class="num">${f(P[k])}</td>`).join('')}</tr>`).join('') +
+    `<tr><td>Holding, ordering and total cost</td><td colspan="${keys.length}" class="faint">Blocked: no approved cost set (team decisions D-09, D-10). INSpire reports units, not money.</td></tr>`;
+  chart && chart.destroy();
+  chart = new Chart(document.getElementById('cPath'), { type: 'line',
+    data: { labels: cur.sample_path.map((_, i) => i + 1), datasets: keys.map(k => ({ label: NAMES[k], data: P[k].sample_path, borderColor: COLORS[k], borderWidth: 2, pointRadius: 0, stepped: true })) },
+    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'bottom' } },
+      scales: { x: { title: { display: true, text: 'Day' }, ticks: { maxTicksLimit: 12 }, grid: { display: false } },
+                y: { title: { display: true, text: 'Stock ({{ p.unit if p else "units" }})' }, grid: { color: '#e6ebf2' } } } } });
+}
+runTwin();
+</script>
+{% endblock %}

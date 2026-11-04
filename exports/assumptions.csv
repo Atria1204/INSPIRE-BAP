@@ -1,0 +1,18 @@
+﻿key               , value                                                                                                    , note
+as_of             , 2026-10-01                                                                                               , Analysis date: the day after the last transaction in the data.
+history_window    , 2025-05 to 2026-09 (17 months)                                                                           , Monthly consumption buckets from Movement Material.
+unit_price        , PO-Item Amount = net price per unit                                                                      , "Correlation between PR quantity and amount is -0.07, so the amount is read as a unit price."
+fx_to_idr         , "IDR 1, USD 18,000, EUR 20,600, SGD 14,000, JPY 115"                                                     , "USD 18,000 set by the team (Nov 2026). EUR, SGD, JPY derived from USD 18,000 using market cross rates (EUR/USD ~1.14, USD/SGD ~1.28, JPY 115 per Google, Nov 2026). Replace with treasury rates."
+criticality       , A > S > B > C                                                                                            , "Highest class of any functional location the part is installed on. A is the highest; S is a special class (most S locations are SAFETY items such as safety valves), placed between A and B until the plant confirms its rule."
+service_level     , "A 99.0%, S 97.5%, B 95.0%, C 90.0%"                                                                     , Target cycle service level per criticality.
+order_cost        , "IDR 750,000 per order"                                                                                  , Used in the economic order quantity.
+holding_rate      , 25% of item value per year                                                                               , "Carrying cost: capital, storage, insurance, obsolescence."
+forecast          , "SBA (Croston, Syntetos-Boylan) for intermittent and lumpy items, SES for smooth and erratic, alpha 0.15", SES: Brown (1959). Croston (1972). SBA bias correction: Syntetos & Boylan (2005). Standard methods for spare parts with irregular demand.
+unit_price_method , median of all PO prices of the part in the window                                                        , "Prices of the same part vary little (median spread max/min 1.07), so the median is used for planning and valuation."
+mrp_recommendation, "Non Stock used 3+ times in 12 months -> Stock Item; Stock Item never used, class B/C/blank -> Non Stock", "Reviews the planning category itself, not only the numbers."
+demand_class      , ADI 1.32 / CV2 0.49 (Syntetos-Boylan)                                                                    , "Smooth, erratic, intermittent, lumpy."
+lead_time         , "PR date to PO delivery date, per material; fleet median when a part was never bought"                   , From PR PO.
+planned_demand    , PM events in the next 12 months on functional locations where the part is installed                      , Indicative only: maintenance plans do not list the spare parts they consume.
+reorder_point     , 2000 Monte Carlo runs of lead-time demand per part; ROP = service-level percentile                       , "Banks & Carson, Discrete-Event System Simulation, Example 2.11 (lead-time demand). Suits irregular demand better than a normal formula."
+value_outlier     , stock value above the 99.9th percentile of priced parts                                                  , Shown separately so a few synthetic records do not dominate totals.
+failure_signal    , Notifications N2 (all Emergency priority) treated as breakdowns                                          , From Notif History.

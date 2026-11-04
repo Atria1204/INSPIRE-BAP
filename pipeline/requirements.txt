@@ -1,0 +1,4 @@
+# only needed to rebuild the database locally (python pipeline/build_db.py)
+pandas>=2.0
+openpyxl>=3.1
+numpy>=1.26
